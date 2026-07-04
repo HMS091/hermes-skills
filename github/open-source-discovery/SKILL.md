@@ -1,7 +1,7 @@
 ---
 name: open-source-discovery
 description: "Find and evaluate open-source projects on GitHub for reuse/modification — search strategies, quality assessment, red-flag detection, README verification, and project comparison. For users who want ready-made code to modify and deploy."
-version: 2.0.0
+version: 2.2.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos]
@@ -426,7 +426,55 @@ High reaction counts (👍 > 3) on open issues = community pain points. READMEs 
 
 **Cross-reference Issues with hardware type** — check for issues mentioning: `vram`, `memory`, `gpu`, `显存`, `显卡`, `OOM`, `out of memory`, `crash`, `killed`. These reveal the actual VRAM floor vs the advertised minimum.
 
-#### Phase 4.5: HuggingFace / Model Hub Check (Adoption Signal)
+### Phase 5.5: Platform Compatibility Check — Docker & NAS
+
+When evaluating **Docker-based projects** for deployment on **NAS or embedded systems** (Synology, QNAP, OpenWrt, etc.), the README almost never mentions platform limitations. **You must check Issues for the user's specific hardware.**
+
+```bash
+# Check if there are issues mentioning the user's platform
+curl -s "https://api.github.com/repos/OWNER/REPO/issues?state=all&per_page=30" \
+  | python3 -c "
+import json,sys; data=json.load(sys.stdin)
+keywords = ['synology', 'qnap', 'nftables', 'iptables', 'nas', 'docker', 'kernel', '权限', 'nft']
+for i in data:
+    t = (i.get('title','') + ' ' + (i.get('body','') or '')).lower()
+    if any(k in t for k in keywords):
+        print(f'#{i["number"]} [{i["state"]}] 👍{i.get("reactions",{}).get("total_count",0)} | {i["title"][:100]}')
+"
+```
+
+**Key culprit: official Cloudflare WARP client on Synology.**
+- The official `warp-svc` binary uses **nftables** internally to manage firewall rules.
+- Synology DSM runs old Linux kernels (4.4.x) that use **iptables** — nftables is either missing or incomplete.
+- This causes `Failed to run NFT command` errors and the container exits immediately.
+
+**Two workarounds exist:**
+
+**Workaround A: WARP Proxy Mode** (for projects using official WARP binary)
+```
+warp-cli mode proxy          # switches from VPN/TUN mode to local proxy
+warp-cli proxy port 40000    # listens on port 40000, no nftables needed
+```
+This avoids nftables entirely. Trade-off: **no UDP support**.
+
+**Workaround B: wgcf + sing-box (userspace)** — avoids the official WARP binary completely.
+- Uses `wgcf` to register a WARP account via Cloudflare API
+- Uses `sing-box` (userspace WireGuard) to run the tunnel
+- No nftables, no TUN device, no NET_ADMIN capability needed
+
+**Docker Hub image freshness check** — GitHub repo may show bot activity while Docker images are stale. Always check:
+
+```bash
+curl -s "https://hub.docker.com/v2/repositories/OWNER/IMAGE/tags?page_size=5" | python3 -c "
+import json,sys; d = json.load(sys.stdin)
+for r in d.get('results', []):
+    print(f'{r[\"name\"]} | updated:{r[\"last_updated\"][:10]}')
+"
+```
+
+Compare Docker Hub push date with GitHub commit date. Docker image >3 months stale but GitHub showing recent commits = bot activity, not maintenance.
+
+### Phase 5.6: HuggingFace / Model Hub Check (Adoption Signal)
 
 If the project has model weights on HuggingFace, check these signals:
 
@@ -531,10 +579,210 @@ Structure as a comprehensive report:
 
 ---
 
+## 10. Viability Assessment — Is This Project Still Alive?
+
+When a user asks you to evaluate a specific existing project for deployment (rather than discovering new ones), you must go beyond star counts and README review to assess **whether it still works in today's environment**. This is especially critical for projects in fast-changing domains like VPN/proxy, AI, or services that depend on third-party APIs.
+
+### When to Use
+
+- User points you to a specific GitHub repo and asks "can I use this?"
+- The repo is archived or hasn't been updated in >6 months
+- The project depends on a third-party API or service (Cloudflare, OpenAI, Stripe, etc.)
+- The user asks "has anyone been banned / does this still work"
+
+### Phase 1: Quick Kill — Check Archived Status
+
+**The very first thing to check** — if a repo is archived, the owner has declared it read-only. This is an instant orange-to-red flag:
+
+```bash
+# GitHub API shows archived status
+curl -s "https://api.github.com/repos/OWNER/REPO" | python3 -c "
+import json,sys;r=json.load(sys.stdin)
+print('Archived:', r.get('archived', 'unknown'))
+print('Disabled:', r.get('disabled', 'unknown'))
+print('Last push:', r.get('pushed_at',''))
+print('Open issues:', r.get('open_issues_count',0))
+"
+```
+
+An archived repo (archived=true) means: no new features, no bug fixes, no security patches. If it also has open issues with recent activity, those bugs will never be fixed.
+
+### Phase 2: Issue Comment Mining — Read the Real Reviews
+
+**Do NOT stop at issue titles.** The actual user comments are where the truth lives. People write polite title text but vent in the comments.
+
+```bash
+# For each high-priority open issue, fetch ALL comments
+curl -s "https://api.github.com/repos/OWNER/REPO/issues/ISSUE_NUMBER/comments" | python3 -c "
+import json,sys
+comments = json.load(sys.stdin)
+for c in comments:
+    print(f'--- @{c[\"user\"][\"login\"]} | {c[\"created_at\"][:10]} ---')
+    print(c['body'][:500])
+    print()
+"
+```
+
+**What to look for in comments:**
+
+| Signal | What It Means |
+|--------|---------------|
+| Multiple "+1" or "me too" | Widespread issue, not isolated |
+| "My connection stopped working" | Backend/service change |
+| "It used to work, now it doesn't" | API deprecated or blocked |
+| "Switched to X instead" | Users have migrated away — endorsement of alternative |
+| "Project is dead" | Community has given up |
+| "IPs all blocked in my region" | GFW/censorship bypass no longer works |
+| "403 Forbidden" | Backend API rejecting requests |
+
+**Example from session (WARP-Clash-API):**
+- Issue #217 with 33 comments revealed: IPv4 WARP nodes got blocked by GFW in June 2024, IP optimization returned 0 nodes, users gave up and went back to paid proxies.
+- Issue #234 (5 comments, all "+1"): 403 Forbidden on Cloudflare API — confirmed backend change.
+- Issue #230 comment: "这项目已经死了...各奔东西吧" — community death knell.
+
+### Phase 3: API Endpoint Live Testing
+
+For projects that depend on external APIs, **test the endpoints directly** with curl:
+
+```bash
+# 1. Check the project's main API endpoint
+curl -s -o /dev/null -w "HTTP %{http_code} | Time: %{time_total}s\n" "https://api.example.com/" --max-time 10
+
+# 2. Test a realistic request (not just HEAD/GET)
+curl -sv "https://api.example.com/v1/endpoint" -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"test":"data"}' --max-time 10 2>&1 | grep -E "< HTTP|< content-type"
+
+# 3. Interpret the results:
+#    - HTTP 200/201 = endpoint alive
+#    - HTTP 400 = endpoint alive but rejects bad data (expected for test payloads)
+#    - HTTP 403 = endpoint blocking (Cloudflare/API key required)
+#    - HTTP 404 = endpoint removed or path changed → project is broken
+#    - Timeout/connection refused → service is down
+```
+
+**Example from session:** WARP-Clash-API's `api.cloudflareclient.com` returned HTTP 400 (invalid registration) not 403 (blocked). This told us the API was still alive but the project's specific auth flow was failing for some users — confirming a partial breakage, not total shutdown.
+
+### Phase 4: Fork Activity Check
+
+For archived/dead projects, check if any fork continued development:
+
+```bash
+# Get top-N forks ordered by stars
+curl -s "https://api.github.com/repos/OWNER/REPO/forks?sort=stargazers&per_page=10" | python3 -c "
+import json,sys
+forks = json.load(sys.stdin)
+for f in forks:
+    print(f'{f[\"full_name\"]} | ⭐{f[\"stargazers_count\"]} | pushed:{f[\"pushed_at\"][:10]}')
+"
+```
+
+**Interpretation:**
+- A fork with recent pushes (last 30 days) and non-trivial stars (>10% of parent) = the project lives on
+- All forks pushed >6 months ago = nobody revived it → dead
+- **Example:** WARP-Clash-API's top fork had 9 stars, pushed May 2024 — dead.
+
+### Phase 5: Region-Specific Testing
+
+For censorship-bypass or geo-restricted tools, the project might work in one region but not another:
+
+```bash
+# Test from your current server
+curl -s -o /dev/null -w "HTTP %{http_code} | Time: %{time_total}s\n" \
+  "https://api.service.com/endpoint" --max-time 10
+
+# Check if the project's README or issues discuss regional differences
+# Look for: GFW, 中国, 墙, blocked, region, route
+```
+
+**Example:** WARP-Clash-API issue comments revealed that the same key worked on overseas servers but not in China, and IPv6 bypass worked while IPv4 was fully blocked — crucial region-specific findings that the README never mentions.
+
+### Phase 6: Find Active Alternatives — When a Project Is Dead
+
+When your viability assessment concludes a project is dead/blocked/archived, **immediately pivot to finding active alternatives.** The user didn't come for a death certificate — they came for a working solution.
+
+#### Step 1: Feature-Set Keyword Extraction
+
+Analyze what the dead project *does* and extract searchable keywords:
+
+```
+Original: "WARP+ traffic via Clash subscription with auto-farming"
+Keywords: WARP, Clash, subscription, Cloudflare Worker, proxy, VLESS, Trojan, WireGuard
+```
+
+#### Step 2: Multi-Angle Search with Recency Bias
+
+Search GitHub API with `sort=updated` to find currently active repos:
+
+```bash
+# Angle 1: Core feature set
+curl -s "https://api.github.com/search/repositories?q=WARP+Clash+subscription&sort=updated&per_page=30"
+# Angle 2: Related protocols/tech
+curl -s "https://api.github.com/search/repositories?q=WARP+VLESS+Trojan&sort=updated&per_page=30"
+# Angle 3: Broader category terms  
+curl -s "https://api.github.com/search/repositories?q=warp+config+generator&sort=updated&per_page=30"
+```
+
+Filter results aggressively:
+```python
+if repo['archived']: skip
+if repo['pushed_at'][:10] < '6_months_ago': skip
+if repo['stargazers_count'] < 10 and not recently pushed: skip
+```
+
+#### Step 3: Verify Top Candidates
+
+For the top 2-3 results, quickly verify they're alive:
+
+```bash
+curl -s "https://api.github.com/repos/OWNER/REPO" | python3 -c "
+import json,sys;r=json.load(sys.stdin)
+print(f'⭐{r[\"stargazers_count\"]} | pushed:{r[\"pushed_at\"][:10]} | archived:{r.get(\"archived\",False)}')
+"
+curl -s "https://api.github.com/repos/OWNER/REPO/commits?per_page=3" | python3 -c "
+import json,sys
+for c in json.load(sys.stdin):
+    print(c['commit']['committer']['date'][:10], '|', c['commit']['message'][:60])
+"
+```
+
+**Real-world example from session:** WARP-Clash-API (archived, 8.8k⭐) → alternatives found:
+- **bia-pain-bache/BPB-Worker-Panel** (12.2k⭐, updated today, Cloudflare Worker deploy, VLESS/Trojan/WARP protocols)
+- **nellimonix/warp-config-generator-vercel** (942⭐, updated yesterday, Docker/Vercel/CF Workers deploy, WireGuard/Clash formats)
+
+### Viability Verdict Output
+
+When reporting back to the user, use this format:
+
+```markdown
+## 🧪 项目可用性评估
+
+**结论：** [可用/部分可用/不可用]
+
+| 检查项 | 结果 | 说明 |
+|--------|------|------|
+| 仓库状态 | ✅ 活跃 / ⚠️ 归档 / ❌ 删除 | |
+| 最近更新 | N 个月前 | |
+| Issue 活跃度 | N 条开放, 最新更新: 日期 | |
+| API 端点 | ✅ 存活 / ❤ 404 / ⚠️ 403 | 实测于 日期 |
+| 用户反馈 | ✅ 正常 / ⚠️ 部分问题 / ❌ 大面积报错 | 来源: Issue # |
+| 分支活跃度 | ✅ 有活跃分支 / ❌ 全停更 | |
+| 国内可用 | ✅ / ⚠️ 仅 IPv6 / ❌ 被墙 | 仅区域相关项目 |
+
+**风险说明：**
+- 具体问题 1
+- 具体问题 2
+
+**建议：** [推荐部署 / 不推荐 / 仅限特定场景使用]
+```
+
+---
+
 ## References
 
 See `references/ai-llm-ecosystem-survey-202606.md` for the comprehensive AI/LLM open-source landscape survey across 8 categories.
 See `references/customer-support-systems-202606.md` for the solopreneur customer support system survey (Freescout, Chatwoot, etc.).
+See `references/warp-clash-api-viability-202607.md` for a practical case study of viability assessment on an archived Cloudflare WARP+ project (API endpoint testing, issue comment mining, GFW blocking analysis).
 
 ## Pitfalls
 
@@ -548,7 +796,11 @@ See `references/customer-support-systems-202606.md` for the solopreneur customer
 8. **GitHub Issues are the real review system** — READMEs show the best case, Issues show the pain points. Always check high-reaction issues for hardware/performance/bug complaints.
 9. **Check HF Spaces count** — number of Spaces using a model is a proxy for real-world adoption, independent of GitHub stars.
 10. **Don't over-trust star count for hardware-heavy AI projects** — a 7k⭐ project might need A100 GPUs; a 700⭐ project might run on a laptop. Check actual requirements.
-11. **Browser navigation can time out on heavy GH pages** — when browsers fail, fall back to curl + GitHub API which is more reliable from restricted environments.
+11. **Browser navigation can time out or get bot-blocked on heavy GH pages** — GitHub uses bot detection that truncates/blanket-blocks full page content while still showing the shell. When browser fails:
+    - **For READMEs:** Use `raw.githubusercontent.com/OWNER/REPO/branch/README.md` — this endpoint is NOT behind GitHub's bot-detection, loads instantly via curl, and works when the rendered browser view is blocked. Try `main` first, then `master`.
+    - **For metadata/stats:** Use `api.github.com/repos/OWNER/REPO` — also bot-detection-free.
+    - **For file listing:** Use `api.github.com/repos/OWNER/REPO/contents/` to check directory structure.
+    - Do NOT keep retrying the browser — pivot immediately to raw/API endpoints.
 
 12. **Browser search engines (Google/Bing) may block or return irrelevant results** — for niche AI tool research, Google may present CAPTCHA and Bing may return unrelated content (e.g., a boat launch page for "Coventry Lake" when searching "InfiniteTalk"). When this happens, pivot to:
     - **GitHub Issues** as the primary user review source (the README is marketing, Issues are truth). Sort by reactions to find community pain points. High-reaction open issues (👍 > 3) reveal real problems the README hides.
