@@ -110,6 +110,18 @@ params_buy = {
 }
 ```
 
+**RPC rate limiting workaround**: Free BSC RPC nodes return `{"code":-32005,"message":"limit exceeded"}` for `eth_getLogs` queries spanning more than ~5000 blocks. Workaround: query in **small batches** (200-500 blocks per call) and aggregate results:
+```python
+LATEST = latest_block
+BATCH = 200
+for i in range(0, TOTAL_BLOCKS, BATCH):
+    FROM = LATEST - i - BATCH
+    TO = LATEST - i
+    payload = { "fromBlock": hex(FROM), "toBlock": hex(TO), ... }
+    # call and collect
+```
+Or use premium RPC endpoints like QuickNode, Alchemy for full-range scans.
+
 **Timeout handling**: Loop through multiple endpoints. Empty results = wallet never directly transferred this token (but may have swapped via a DEX pair). `eth_getTransactionByNonce` is NOT supported on BSC.
 
 **Important limitation**: RPC only shows direct token transfers. Swaps through PancakeSwap V2 pairs appear as interaction with the pair contract, not the token contract. See Phase 6 below for wallet behavioral analysis workflow.
@@ -392,7 +404,57 @@ actual_balance = token_balance_raw / (10 ** decimals)
 
 **Important:** This technique detects one specific scam class (balance-faking honeypots). A clean balanceOf() check does NOT mean the token is safe — check other signals (honeypot sell tax, mint functions, ownership) separately.
 
-### Phase 5b: Proxy Contract Detection & Analysis
+### Phase 5d: LP Activity & Trading Volume Analysis
+
+When a token has a PancakeSwap V2 pair but you need to know if it's actually being traded:
+
+**Step 1: Get the pair address** (from DexScreener or Factory):
+```python
+factory = "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73"  # PancakeSwap V2
+pair_data = eth_call(factory, 
+    "0xe6a43905" + "0"*24 + token0[2:].lower() + "0"*24 + token1[2:].lower())
+pair_addr = "0x" + pair_data[-40:]
+```
+
+**Step 2: Query Swap events on the pair (not Transfer on the token):**
+```python
+swap_sig = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822"
+params = {"fromBlock": hex(FROM), "toBlock": "latest", "address": pair_addr,
+          "topics": [swap_sig]}
+swaps = rpc_call("eth_getLogs", [params]).get("result", [])
+```
+
+**Step 3: Interpret swap direction** (token0=USDT, token1=PRO in the example):
+```python
+data = log["data"][2:]
+amt0_in = int(data[:64], 16)   # USDT in
+amt1_in = int(data[64:128], 16) # PRO in
+amt0_out = int(data[128:192], 16) # USDT out
+amt1_out = int(data[192:256], 16) # PRO out
+
+if amt0_in > 0 and amt1_out > 0: buy_count += 1   # USDT → PRO (buying)
+if amt1_in > 0 and amt0_out > 0: sell_count += 1  # PRO → USDT (selling)
+```
+
+**Step 4: Check activity across multiple time windows:**
+```bash
+# Test 100, 1000, 10000, 100000 block ranges
+# If ALL show 0 swaps despite LP having real reserves → token is "dead" (no trading)
+```
+
+**The "Dead Token" Pattern** (what this project exhibits):
+- ✅ Real liquidity ($43M USDT in LP)
+- ✅ Renounced owner (0xdead)
+- ✅ LP Tokens burned (99.996% in dead address)
+- ✅ No proxy/upgrade mechanism
+- ❌ **Zero trading activity** across all time windows
+- ❌ Top holder (53%) never sells (nonce=2, BNB=0)
+- ❌ No public team/website/social media
+- ❌ Not on CoinGecko/CMC
+
+Interpretation: Not an active rug (LP is locked, owner renounced), but **commercially dead**. The $43M LP is essentially frozen — no one can withdraw it (LP burned) and no one is trading against it. The project raised capital, created LP, then stopped operating.
+
+**Holder count vs actual activity**: When BscScan shows 616K holders but chain has 0 Transfer events in the last 100K blocks (~28h), the holder count is **cumulative all-time** (every address that ever received ≥1 wei). New holders can only come from new transfers — if transfers = 0, the holder count is NOT growing organically. Report the discrepancy clearly.
 
 When a top holder on BscScan is a **contract address** (not a regular wallet/EOA), analyze what type of contract it is. Proxy contracts as top holders are a major red flag.
 

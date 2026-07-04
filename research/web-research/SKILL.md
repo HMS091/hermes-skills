@@ -1,7 +1,7 @@
 ---
 name: web-research
 description: "Web research for SaaS/platform/service alternatives AND deep-dive forum/community crawling — find, compare, and evaluate online services, products, and community knowledge. Covers search engine fallback strategies in restricted environments, proxy-based searching, forum registration/crawling (NodeBB/Discourse/XenForo), Bilibili scraping, cross-region price comparison, and commercial clone-script research."
-trigger: "User asks to find alternative websites, platforms, or services matching specific criteria — any 'find me X like Y' task. Also: user asks to investigate or validate a specific website/service; user asks to 'go learn from' or 'research on' a specific forum or community; user asks for hardware/software comparison where community knowledge is primary source; user asks to find contact info for a Chinese content creator on Bilibili."
+trigger: "User asks to find alternative websites, platforms, or services matching specific criteria — any 'find me X like Y' task. Also: user asks to research a private company's user numbers, revenue, or financial data (corporate/company research); user asks to investigate or validate a specific website/service; user asks to 'go learn from' or 'research on' a specific forum or community; user asks for hardware/software comparison where community knowledge is primary source; user asks to find contact info for a Chinese content creator on Bilibili."
 ---
 
 # Web Research: Service/Platform Comparison
@@ -56,7 +56,19 @@ This environment has a Clash proxy (192.168.1.88:7890) that enables search acces
      -x http://192.168.1.88:7890 -H "User-Agent: Mozilla/5.0"
    ```
 
-2. **✅ Google News search** (fallback when DDG/Google/Bing all blocked)
+2. **🟢 DuckDuckGo Lite** (intermediate fallback when DuckDuckGo HTML returns CAPTCHA)
+   When the full HTML version is blocked (detect: no `result__a` class elements), try the **Lite** variant:
+   ```bash
+   curl -sL "https://lite.duckduckgo.com/lite/?q=<search terms>" \
+     -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+   ```
+   DuckDuckGo Lite returns simpler, less-bot-triggering HTML. Parsing is by stripping HTML tags and grepping for keywords rather than CSS selectors:
+   ```bash
+   sed 's/<[^>]*>//g' /tmp/ddg_lite.html | tr -s '\n' '\n' | grep -i 'keyword1\|keyword2'
+   ```
+   The Lite version includes article titles, URLs, snippets, and publication dates — sufficient for identifying which sources to curl directly.
+   
+3. **✅ Google News search** (fallback when DDG/Google/Bing all blocked)
    When standard search engines are blocked (DDG CAPTCHA, Google redirect, Bing empty), **Google News** (`news.google.com/search?q=...`) reliably returns server-rendered HTML without CAPTCHA — no JS needed.
    
    **Curl command:**
@@ -197,7 +209,7 @@ Common platforms for free Docker deployment:
 - **Prioritize actionable results**: End with a clear "what to do next" recommendation
 
 ## Pitfalls
-- **All search engines blocked scenario**: In this Docker environment, DuckDuckGo, Google, AND Bing can all simultaneously block automated queries (DDG returns CAPTCHA, Google redirects to support page, Bing returns empty). When ALL three are blocked, **try Google News as an intermediate fallback** (see Phase 2 approach #2 — it often works when standard search engines don't). Only if Google News also fails should you abandon search engines entirely and shift to: (1) direct-known-vendor curl scraping, (2) GitHub API for open-source baselines, (3) domain knowledge synthesis. Do NOT keep retrying the same blocked engines — it wastes time.
+- **All search engines blocked scenario**: In this Docker environment, DuckDuckGo, Google, AND Bing can all simultaneously block automated queries (DDG returns CAPTCHA, Google redirects to support page, Bing returns empty). When the full DDG HTML is blocked, **first try DuckDuckGo Lite** (`lite.duckduckgo.com/lite/`) as an intermediate fallback — it uses simpler HTML that's less likely to trigger CAPTCHA. Only if DuckDuckGo Lite also fails should you move to Google News RSS. Only if Google News RSS fails should you abandon search engines entirely and shift to: (1) direct-known-vendor curl scraping, (2) GitHub API for open-source baselines, (3) domain knowledge synthesis. Do NOT keep retrying the same blocked engines — it wastes time.
 - **Search engines blocked from Docker**: DuckDuckGo, Google, Bing all anti-bot from container IPs. Always try proxy first, but accept that search may fail and fall back to known-platform knowledge. **DuckDuckGo HTML mode now returns CAPTCHA anomaly pages (~14KB, no result links) for many queries — check for `result__a` class presence to detect blocks.**
 - **Proxy dependency**: The Clash proxy (192.168.1.88:7890) is on an OpenWRT router connected to the NAS. It may be slow or temporarily unreachable. Do NOT permanently remove proxy config — backup before modification
 - **curl vs Python for page fetching**: Use `curl -sL` for initial connectivity checks. For content extraction, pipe from curl to python3. DO NOT use Python `requests`/`urllib` for first attempts — they have different TLS fingerprints and may trigger different blocking
@@ -493,11 +505,41 @@ This works because even JS-heavy landing pages have server-rendered meta tags fo
 
 See `references/commercial-clone-script-research.md` for detailed vendor landscape, pricing comparison, and evaluation checklists (OnlyFans clone category used as worked example).
 
-**References** (from absorbed web-scraping-with-python skill):
+## Special Application: Business & Company Research (公司/产品研究)
+
+Pattern for researching a company or service launch — extracting launch dates, growth data, business model, and cross-referencing claims from press releases and media coverage. Used when the user asks "research X business" or "find launch data for Y."
+
+### Key Differences from SaaS/Platform Comparison
+
+| Dimension | SaaS Comparison | Business Research |
+|-----------|----------------|-------------------|
+| **Target data** | Features, pricing, tiers | Launch dates, growth metrics, ownership |
+| **Primary sources** | Vendor pricing pages | Press releases, news articles, award pages |
+| **Data structure** | Tabular comparison | Timeline + cross-referenced claims |
+| **Search strategy** | Find alternatives | Find official announcement + third-party coverage |
+
+### Workflow
+
+1. **DuckDuckGo Lite search** — bypass CAPTCHA blocks on `html.duckduckgo.com`
+2. **Identify candidate sources** from Lite results: press releases (Yahoo Finance, GlobeNewswire, PRNewswire), official company press area, tech media coverage
+3. **Dive into each source** — download raw HTML and extract embedded JSON data:
+   - Yahoo Finance/Next.js pages: JSON-LD in meta tags, `__NEXT_DATA__` script, page `"text"` nodes
+   - Nord Security press area: `__NEXT_DATA__` with full article body
+   - GlobeNewswire: HTML meta tags (`og:title`, `itemprop="description"`)
+4. **Triangulate** — cross-reference official press release vs third-party blogs vs aggregator entries
+5. **Compile structured report** with timeline table, business overview, growth data, and source URLs
+
+### Reference File
+
+See `references/business-company-research.md` for full workflow, curl commands for each source type, browser-based corporate site reconnaissance (trust centers, transparency reports, blog/annual wrap-up PDF discovery), PDF download & parsing with pymupdf, and pitfalls (Cloudflare, private company data limitations, CEO title changes).
+
+**References**:
 - `references/scraping-docker-deploy-platforms.md` — Multi-site bulk check pattern for free Docker deploy platforms
 - `references/scraping-gpu-price-sources.md` — GPU/electronics real-time price scraping (DCFever HK, Goofish, Taobao, JD)
 - `references/scraping-freelancer-api.md` — Freelancer API reference (Freelancer.com public endpoint)
-- `references/commercial-clone-script-research.md` — White-label/clone script product research: pricing patterns, vendor landscape, evaluation criteria for commercial SaaS clone products (OnlyFans, OnlyFans-style, subscription content platforms). **Includes**: CodeCanyon (Cloudflare-blocked) strategy, Chinese marketplace limitations, low-cost vendor tier (India/South Asia) analysis.
+- `references/commercial-clone-script-research.md` — White-label/clone script product research: pricing patterns, vendor landscape, evaluation criteria for commercial SaaS clone products
+- `references/business-company-research.md` — Multi-source triangulation for company/product/service launch research: DuckDuckGo Lite bypass, press release JSON extraction, source cross-referencing, structured report generation
+- `references/wikipedia-research-proxy.md` — Using Wikipedia as a proxy for blocked primary sources: REST API vs MediaWiki API, citation mining, security scanner workarounds, and data triangulation when Forbes/Statista/GVR are behind Cloudflare
 
 ---
 

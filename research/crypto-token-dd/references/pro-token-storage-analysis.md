@@ -38,13 +38,58 @@ constructor:
 | **13** | **deployer** | **`0x543302e9d9411e563ad8266ceef2a85b66050832`** | 🔴 Changed! | Liq wallet transferred |
 | **14** | **0** | **1781982105** (2026-06-20) | 🔴 Active recently | Last config change timestamp |
 
-## Key Findings
+## LP Token Analysis
 
-1. **Owner IS renounced** (`0xdead`) — but the contract was actively controlled until 2 weeks before.
-2. **Controller was transferred** to a different address (`0x96079ef9...`) — the original deployer gave control to someone else.
-3. **Parameter at slot 10 was increased 5x** (100→500) — likely a tax/fee change.
-4. **Liquidity wallet was changed** to a different address.
-5. **Timestamp at slot 14 = 2026-06-20** — someone modified the contract then, and renounced shortly after.
+**Pair:** `0x63844bd4bfad910b1643713302a1cc1ed20d50c3` (PRO/USDT on PancakeSwap V2)
+
+| Metric | Value |
+|--------|-------|
+| LP total supply | 185,742,231,653 LP tokens |
+| LP at dead address | 185,734,841,148 (99.996%) |
+| Remaining LP | 7,390,505 (0.004%) — spread across many addresses |
+| Pool USDT reserve | $43,132,758 |
+| Pool PRO reserve | 715,763 PRO |
+| Price (from LP) | ~$60.26/PRO |
+
+**Conclusion:** LP is permanently locked — 99.996% burned. No one can withdraw. But also zero trading activity (0 Swap events in last 100K+ blocks across multiple RPC nodes).
+
+## Blacklist Check
+
+Tested via `eth_call` with `0x9b19251a` (isBlacklisted selector):
+
+| Address | Blacklisted? |
+|---------|:-----------:|
+| Dead address `0x...dead` | 🟢 No |
+| Controller `0x96079ef9...` | 🟢 No |
+| Marketing wallet `0xf9074b5c...` | 🟢 No |
+| **Liquidity wallet** `0x543302e9...` | 🔴 **Yes** |
+| #1 holder `0xc0021e08...` | 🟢 No |
+| LP pair `0x63844bd4...` | 🟢 No |
+
+Mapping cannot be enumerated on-chain — total count of blacklisted addresses is unknown without indexed data.
+
+## Top Holder (#1) Analysis
+
+**Address:** `0xc0021e0849fadefb98761f40829009905dbd8ee8`
+
+| Metric | Value |
+|--------|-------|
+| PRO balance | 3,675,725 PRO (53.08% of supply) |
+| BNB balance | 0 BNB |
+| USDT balance | 0 USDT |
+| Total transactions (nonce) | **2** |
+| Any sells? | **0 — never sold** |
+
+## Owner Lock Analysis
+
+```
+eth_call(owner()) → 0x000000000000000000000000000000000000dead
+transferOwnership() requires: msg.sender == owner()
+```
+
+- Only `0xdead` can call `transferOwnership()`
+- `0xdead` private key = nonexistent
+- **Owner permanently locked. Cannot be changed back.**
 
 ## The "Renounced-but-Manipulated" Pattern
 
@@ -58,5 +103,3 @@ Timeline:
   → Now: looks "safe" because owner is dead
   → BUT: tax was already hiked, liquidity wallet was already changed
 ```
-
-**Lesson:** "Renounced" is NOT "safe." The owner extracted maximum value first, then walked away.

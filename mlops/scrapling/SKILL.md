@@ -1,7 +1,7 @@
 ---
 name: scrapling
 description: "Web data extraction and crawling. When user asks to scrape/get/fetch/extract data from a website, use Scrapling FIRST. Hermes browser (navigate/click/snapshot) is ONLY for interactive tasks: login forms, CAPTCHA solving, visual confirmation, or sites needing manual click flows. Auto-select the right fetcher based on site difficulty."
-version: "1.1.0"
+version: "1.3.0"
 triggers:
   - user says scrape, crawl, extract, fetch, get data from, collect, gather
   - user says "this site" plus data/info/content
@@ -28,8 +28,44 @@ Only use Hermes browser (navigate/click/snapshot/vision) for:
 - Visual inspection ("what does this page look like?")
 - Sites that require click-to-expand or manual navigation
 - Checking if something rendered correctly
+- **Sibling domain navigation** when target has aggressive Cloudflare (see sibling domain technique below)
+- **Multi-page site traversal** through menus/links (navigate → click links on same domain)
+- **Targeted data extraction** via browser_console JS when snapshots are truncated
 
 Otherwise: Scrapling is faster, cheaper, and more reliable.
+
+### Data extraction via browser_console
+
+When `browser_snapshot` is truncated (>8000 chars) or doesn't show the content you need, use `browser_console` with JS expressions:
+
+```javascript
+// Get current page URL
+window.location.href
+
+// Find specific elements
+document.querySelector('a[href*="terms"]')?.href
+
+// Search page text for keywords
+document.body.innerText.includes('Saily')
+
+// Extract text around a keyword
+const text = document.body.innerText;
+const idx = text.indexOf('keyword');
+text.substring(Math.max(0,idx-100), idx+500)
+
+// Get all headings (page structure)
+document.querySelectorAll('h2,h3,h4')
+  .map(h => h.textContent.trim())
+
+// List all link URLs matching criteria
+const links = document.querySelectorAll('a');
+[...links].filter(l => l.href.includes('impact')).map(l => l.href)
+
+// Extract the body text after removing HTML tags
+document.body.innerText
+```
+
+Combine with `browser_scroll` to reveal more content before extracting.
 
 ## Fetch Decision Tree
 
@@ -38,6 +74,38 @@ Otherwise: Scrapling is faster, cheaper, and more reliable.
 3. **Has Cloudflare/anti-bot** → `StealthyFetcher` / CLI `scrapling extract stealthy-fetch --solve-cloudflare`
 4. **Need multiple pages** → `Scrapling Spider`
 5. **Not sure** -> start with `get`, if fails go `stealthy-fetch`
+
+## PITFALL: Aggressive Cloudflare (managed challenge)
+
+Some sites use Cloudflare's **managed challenge** (the most aggressive tier). StealthyFetcher with `solve_cloudflare=True` may loop 5+ times printing:
+
+```
+The turnstile version discovered is "managed"
+Cloudflare page didn't disappear after 10s, continuing...
+Looks like Cloudflare captcha is still present, solving again
+```
+
+This loop continues until timeout. **StealthyFetcher cannot bypass managed Cloudflare challenges** in this environment (no residential proxies, Chrome version may mismatch).
+
+### Technique: Sibling domain bypass
+
+When a site has aggressive Cloudflare, look for sibling/related domains from the same company that may have weaker protection:
+
+- **Same company, different subdomain/product**: e.g. `surfshark.com` loaded fine while `saily.com` (also by Surfshark/Nord Security) was Cloudflare-blocked
+- **Corporate parent > subsidiary**: try the parent company's marketing site, blog, or help center
+- **Affiliate/partner portals**: `surfshark.com/affiliate` was accessible while `saily.com` was not
+- **Web archives**: Wayback Machine (`web.archive.org`) may have cached versions without Cloudflare
+
+### Chrome binary version mismatch
+
+The installed Playwright/Patchright expects Chrome for Testing 148.x (chromium-1223), but the system has Chrome 149.x at `/opt/data/home/.agent-browser/browsers/chrome-149.0.7827.54/chrome`. Symlinking the newer Chrome to the expected path may let the browser launch but can cause Cloudflare bypass failures. To fix properly, install the exact expected version or update Patchright to match.
+
+```bash
+# Symlink workaround (launches but may fail Cloudflare):
+target="/opt/hermes/.playwright/chromium-1223/chrome-linux64/chrome"
+mkdir -p "$(dirname "$target")"
+ln -sf /opt/data/home/.agent-browser/browsers/chrome-149.0.7827.54/chrome "$target"
+```
 
 ## PITFALL: Proxy env vars break curl-cffi
 
