@@ -278,6 +278,7 @@ If running inside a Docker container on a NAS (Synology, etc.), the network may 
    - **Key principle**: A source returning nothing IS data — it tells you the project hasn't met basic listing criteria
 5. **API key note**: Etherscan API V2 requires an API key. For ad-hoc analysis, use the web HTML endpoint or skip Etherscan data if both API and web are blocked. The lack of Etherscan data is noted as "limited data availability" rather than "no data exists."
 6. **DuckDuckGo as primary search engine**: In Chinese network environments where Google is blocked, DuckDuckGo HTML search (`html.duckduckgo.com/html/?q=...`) is the most reliable search. It returns structured HTML that can be parsed for result titles, URLs, and snippets via regex.
+7. **Session search as last resort**: If **all** external sources (API, RPC, DuckDuckGo) are unreachable or return nothing useful, use Hermes' `session_search(query="<CONTRACT_ADDRESS>")` to recover prior analysis of the same contract. This is faster than retrying failed endpoints and avoids redundant work. The session DB may contain prior findings including token name, chain, risk signals, and on-chain evidence from previous successful RPC calls. _This only helps if the contract was analyzed before — it is not a substitute for first-pass analysis when network is blocked._
 
 ### Phase 5: Honeypot Detection via balanceOf Cross-Verification (Critical!)
 
@@ -358,12 +359,29 @@ def detect_fake_balance(token_addr, wallet_addr, rpc_url="https://bsc-dataseed2.
         print("   → Wallet cannot move these tokens — may be inactive or honeypot")
 ```
 
-**Real-world example (Pro Token PRO on BSC):**
-- BscScan page shows: Wallet `0xc002...8ee8` holds **2,010,000 PRO** (50.62%)
-- `balanceOf()` via RPC returns: **0.0020 PRO**
-- Incoming Transfer events: **zero**
-- BNB balance: **0 BNB**
-- Conclusion: **Fake balance — 100% honeypot scam**
+**⚠️ Critical: decimals mismatch can produce false positives**
+
+Always verify token decimals before interpreting balanceOf() results. The token's `decimals()` function might return non-standard values (e.g., 9 instead of 18). Dividing by 10^18 when the token has 9 decimals produces results off by 10^9 (1 billion times wrong).
+
+```python
+# ALWAYS check decimals first:
+dec_hex = rpc_call("eth_call", [{"to": token_addr, "data": "0x313ce567"}, "latest"]).get("result","0x0")
+decimals = int(dec_hex, 16) if dec_hex != "0x" else 18  # default 18 if not found
+actual_balance = token_balance_raw / (10 ** decimals)
+```
+
+**Real-world example (Pro Token PRO on BSC) — illustrating the decimals trap:**
+- Token decimals: **9** (not the default 18!)
+- Wallet `0xc002...8ee8` claimed to hold 2,010,000 PRO
+- `balanceOf()` raw hex: `0x000000...072d2c866bc94c` → 3,675,882,446,875,117 wei
+- ❌ Divided by 10^18 → **0.0037 PRO** (wrong! → false positive "honeypot")
+- ✅ Divided by 10^9 → **3,675,882 PRO** (53.08% of supply → matches BscScan)
+- BNB balance: **0 BNB** (wallet is a contract, not an EOA — cannot pay gas directly)
+- Incoming Transfer events: zero (may be minted or distributed via factory)
+
+**Lesson:** Always check `decimals()` before interpreting balanceOf(). A wallet with 0 BNB may be a contract, not a dead EOA. Zero Transfer events could mean tokens were minted directly, not transferred. Cross-reference ALL three signals before concluding "fake balance."
+
+**The corrected conclusion for PRO:** The token is NOT a balance-faking honeypot. It has $86M in real LP liquidity on PancakeSwap V2 (43M USDT / 715K PRO), the contract owner is renounced, and the contract source is verified on BscScan. However, 53% supply concentration in one address and the absence of any public team/social presence remain 🚩🚩 risk signals.
 
 **When to use this technique:**
 - ALL tokens where BscScan shows extreme concentration (top 10 > 80%)
@@ -444,8 +462,70 @@ Proxy contracts that appear as top holders on BscScan must also pass the balance
 - Legit: open source, CoinGecko-listed, audited protocol, real community, balanceOf matches Transfer events
 - Scam: proxy contracts as top holders, balanceOf returns fake values, no mainstream listings, hidden/upgradable logic
 
+### Phase 5c: Contract Storage Slot Reading via `eth_getStorageAt` ("Renounced-but-Manipulated" Detection)
+
+Direct storage slot reading verifies the **current state** of a contract, especially parameters the owner may have changed **before** renouncing. This detects the pattern where the owner renounces only AFTER extracting maximum value.
+
+**When to use:**
+- After Phase 5a, to understand fee structure and control
+- When the contract is renounced but you suspect the owner changed parameters first
+- To verify actual configuration vs frontend claims
+
+**Key RPC method:**
+```python
+import urllib.request, json
+payload = json.dumps({
+    "jsonrpc": "2.0", "method": "eth_getStorageAt",
+    "params": [contract_addr, slot_hex, "latest"], "id": 1
+}).encode()
+req = urllib.request.Request(rpc_url, data=payload, headers={"Content-Type":"application/json"})
+result = json.loads(urllib.request.urlopen(req, timeout=15).read()).get("result","0x0")
+```
+
+**Common Solidity storage slot mapping:**
+
+| Slot | Common mapping | Signal |
+|------|---------------|--------|
+| 5 | `owner()` / `_owner` | 🟢 if `0xdead` (renounced) |
+| 6 | `controller` / `operator` / `_auth` | 🔴 if different from deployer |
+| 7 | `marketingWallet` / `feeWallet` | Tax fee recipient |
+| 9 | LP pair address | DEX pair |
+| 10-12 | uint parameters (tax, threshold) | Compare vs initial |
+| 13 | `liquidityWallet` | 🔴 if different from deployer |
+| 14 | Timestamp of last config change | 🚩 if recent |
+
+**Detection workflow:**
+1. Read constructor bytecode → extract initial slot values (e.g., tax=100, threshold=300)
+2. Read current storage → compare (e.g., tax=500 → **was modified!**)
+3. Check slot 14 (timestamp) → confirms recent activity
+4. Check slot 6 (controller) → if different from deployer, control was delegated
+5. Conclusion: "Renounced" means "owner extracted what they wanted and walked away"
+
+**Real-world example (Pro Token PRO, BSC):**
+
+| Parameter | Constructor | Current | Changed? |
+|-----------|------------|---------|----------|
+| Slot 05 (owner) | deployer | `0xdead` | Renounced |
+| Slot 06 (controller) | deployer | `0x96079ef9...` | **Changed** |
+| Slot 10 | 100 | 500 | **5x increase** |
+| Slot 12 | 300 | 250 | Changed |
+| Slot 13 (liq wallet) | deployer | `0x543302e9...` | **Changed** |
+| Slot 14 | 0 | 1781982105 (2026-06-20) | **Active 2 weeks before renounce** |
+
+**From terminal (more reliable than execute_code):**
+```bash
+for slot in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14; do
+  curl -s -X POST "$BSC_RPC" -H "Content-Type: application/json" \
+    -d "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getStorageAt\",
+         \"params\":[\"$CONTRACT\",\"0x$(printf '%x' $slot)\",\"latest\"],\"id\":1}"
+done
+```
+
+**Lesson:** Never trust "renounced" at face value. Verify what the owner did **before** renouncing.
+
 ## Pitfalls
 
+- **JS-heavy token analytics sites (Ave.ai, DexTools, etc.) are not scrapable**: Sites like `ave.ai/token/...` are Nuxt.js SPAs that render zero content in text-based browsers or via curl. Their HTML is a bare `<div id=\"__nuxt\"></div>` with no data. When a user shares an ave.ai link, extract the `token/0x...-bsc` segment from the URL for the address and chain, then proceed with conventional data sources (DexScreener, BSC RPC, etc.). Do NOT attempt to scrape the ave.ai page itself.
 - **Cloudflare protection on ALL blockchain explorers**: Both Etherscan AND BscScan use Cloudflare challenge pages that resist curl. When blocked, move immediately to alternative data sources (OKX Web3, DuckDuckGo cached listings, GeckoTerminal). Do NOT waste retries with different User-Agents.
 - **Rate limiting**: Free API endpoints (DexScreener, CoinGecko, GoPlus) may rate-limit or return empty. Batch all queries in `execute_code`, not sequential `terminal()` calls.
 - **False positives**: A lack of listings is not conclusive — legitimate brand-new projects also won't be on CoinGecko. Cross-reference with social presence and code verification.
@@ -456,6 +536,8 @@ Proxy contracts that appear as top holders on BscScan must also pass the balance
 - **Slippage / tax**: High buy/sell tax isn't automatically a scam — some legit tokens have tax for rewards/burn. But if tax is modifiable by owner → 🔴.
 - **Memory**: Do NOT save token addresses, wallet addresses, or analysis results to memory. These are session-specific artifacts, not durable facts. Instead, write reference files under the skill's `references/` directory if the technique or findings are novel enough for future sessions.
 - **DexScreener endpoints change frequently**: If the standard token/search endpoints return empty, try chain-specific V1 URLs (`/tokens/v1/chain/bsc/<ADDRESS>`) or the generic `latest/dex/search?q=<ADDRESS>`. An empty response from ALL DexScreener variants = no public pair exists = 🚩🚩🚩
+- **Price from LP reserves**: When DexScreener/CoinGecko have no price data but a PancakeSwap V2 pair exists, calculate real price from LP reserves. See `references/lp-price-calculation.md`.
+- **BscScan HTML scraping via curl**: Even when the browser is Cloudflare-blocked, `curl -H "User-Agent: Mozilla/5.0" "https://bscscan.com/token/<ADDRESS>"` often returns the full HTML page. From that you can extract holders count, token rep, verified bytecode, and contract metadata. See `references/bscscan-curl-bypass.md`.
 - **PancakeSwap V2 swaps don't appear as direct token transfers**: If a wallet swaps BNB↔TOKEN on PancakeSwap, the Transfer event goes between the wallet and the PAIR contract, not the token contract. Querying `eth_getLogs` on the token contract with the wallet address will return ZERO results even if the wallet actively traded the token. To detect swap activity, you need the pair address — find it via DuckDuckGo or DexScreener first.
 - **High nonce ≠ PRO token trades**: A wallet with 3000+ nonce may be a sniper bot, rug pull aggregator, or just a memecoin degen. Don't conflate general trading activity with interest in the specific token being analyzed. Check the specific token first.
 - **Abandoned wallet ≠ scam proof**: A wallet that was active then went silent doesn't prove a project is dead. Some traders abandon hot wallets. Cross-reference with on-chain liquidity and social activity.

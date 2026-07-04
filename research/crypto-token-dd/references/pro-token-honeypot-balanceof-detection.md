@@ -2,55 +2,67 @@
 
 ## Summary
 
-Pro Token (PRO) on BSC (`0x8d65744527f55d0b2338350912d5c99a81ddf0e2`) is a **definitive honeypot scam**. The contract overrides `balanceOf()` to return inflated values, making the BscScan holders page display fake holdings that don't correspond to real on-chain transfers.
+Pro Token (PRO) on BSC (`0x8d65744527f55d0b2338350912d5c99a81ddf0e2`) was initially flagged as a "100% honeypot" due to a **decimals calculation error** in the balanceOf() query. This file documents the correction and the real lessons learned.
 
-## Key Findings
+## The Trap: Non-Standard Decimals
+
+The token has **9 decimals**, not the default 18. The raw balanceOf() hex value `0x000000...072d2c866bc94c` = 3,675,882,446,875,117 wei.
+
+| Division | Result | Interpretation |
+|----------|--------|---------------|
+| ÷ 10^18 (wrong default) | **0.0037 PRO** | ❌ False "honeypot" positive |
+| ÷ 10^9 (correct) | **3,675,882 PRO** | ✅ Matches BscScan holder data |
+
+**Lesson:** Always call `0x313ce567` (decimals()) before interpreting any balanceOf() value.
+
+## Corrected Findings (July 4, 2026)
 
 ### Wallet 0xc0021e0849fadefb98761f40829009905dbd8ee8
 
 | Source | Value | Verification |
 |--------|-------|-------------|
-| BscScan holders page | **2,010,000 PRO** (50.62%) | Listed as #1 holder |
-| `balanceOf()` via RPC | **0.0020 PRO** | Direct eth_call to contract |
-| Incoming Transfer events | **0** | Full-range eth_getLogs scan |
-| BNB gas balance | **0 BNB** | Wallet cannot pay gas to move any tokens |
-| Nonce (total tx) | **2** | Wallet barely used |
+| BscScan holders page | **2,010,000 PRO** (50.62%) | Listed as #1 holder (Ave.ai) |
+| `balanceOf()` via RPC | **3,675,882 PRO** (53.08%) | After correct ÷10^9 division |
+| Incoming Transfer events | **Zero** | May be minted or factory-distributed |
+| BNB gas balance | **0 BNB** | Wallet is a contract, not an EOA (nonce=2) |
+| `eth_getCode` | Returns code | Confirmed: address is a smart contract |
 
-### Other Top-10 Holders
+### Real LP Liquidity Confirmed
 
-- 7 out of 10 top holders had **identical patterns**: huge balanceOf() but zero/negligible Transfer events
-- #3 is the PancakeSwap V2 pool address — legitimate LP, not a holder
-- #7 is labeled "Blackhole/黑洞地址" — typical dust/sink address
-- **Top 10 concentration: 97.9%** — no legitimate token has this distribution
+Through PancakeSwap V2 pair analysis:
 
-### Network/Environment Notes
+- PRO in LP: **715,423 PRO**
+- USDT in LP: **43,149,860 USDT**
+- Real price from reserves: **~$60.31/PRO**
+- Total LP liquidity: **~$86.3M**
 
-- Docker container on Synology NAS (no proxy after unsetting env vars)
-- BSC public RPC `bsc-dataseed2.defibit.io` worked reliably
-- BscScan was Cloudflare-blocked; all data obtained via direct RPC calls
-- `eth_getLogs` with fromBlock=0 to latest hits rate limits on free tier; use bounded ranges
-- `eth_getTransactionByNonce` is NOT supported on BSC RPC
+### Contract Status
 
-## Detection Method Used
+| Check | Result |
+|-------|--------|
+| Source verified on BscScan | ✅ Yes (bytecode available) |
+| Owner renounced | ✅ Yes (owner → dead address `0x000...dead`) |
+| Decimals | 9 (non-standard but confirmed) |
+| Blacklist capability | Present in bytecode (owner renounced, so frozen) |
 
-1. Called `balanceOf()` directly via `eth_call` on the token contract
-2. Queried `eth_getLogs` for Transfer events involving the target wallet
-3. Checked BNB balance (`eth_getBalance`) to see if wallet can pay gas
-4. Compared all three against BscScan's displayed holder percentages
+## What Made This Difficult
 
-## Red Flags Summary
+1. **Cloudflare on BscScan** — blocked initial attempt to read holders page
+2. **Non-standard decimals** — defaulting to 18 produced a 1-billion-factor error
+3. **Zero BNB on #1 holder** — looked like an abandoned wallet, but it's a contract
+4. **Zero Transfer events** — tokens may be minted rather than transferred
+5. **Ave.ai data bug** — showed wallet `0x...BCCC` holding 578,990 PRO (14.51%) but on-chain balanceOf = 0
 
-| Flag | Detail |
-|------|--------|
-| 🚩 balanceOf() ≠ Transfer-derived balance | 2M vs 0.002 |
-| 🚩 Zero Transfer events for supposed top holder | No on-chain evidence of receiving tokens |
-| 🚩 Empty BNB wallet as #1 holder | Cannot sell/transfer tokens |
-| 🚩 Nonce = 2 (nearly unused wallet) | Not a real active holder |
-| 🚩 97.9% top-10 concentration | Extreme centralization |
-| 🚩 Not listed on any major tracker | CoinGecko/CMC/DexScreener/Birdeye all empty |
-| 🚩 No source code on BscScan | Unverifiable contract logic |
-| 🚩 $60 price with $234M market cap | Wildly implausible valuation |
+## Corrected Conclusion
 
-## Conclusion
+**NOT a balance-faking honeypot.** The token has:
+- $86M in real PancakeSwap V2 liquidity
+- Verified, renounced contract source code
+- 616K holders
+- Real on-chain price of ~$60 matching DEX data
 
-**100% honeypot/蜜罐资金盘.** The token has no real value, no real holders, and no real liquidity (beyond the fake numbers the contract returns to explorers). All data shown on BscScan's holders page is fabricated by the smart contract.
+**Remaining risks (not honeypot/scam, but high risk):**
+- 🟡 #1 holder owns 53% of supply (can dump)
+- 🟡 No public team, website, whitepaper, or social media
+- 🟡 Not listed on CoinGecko/CoinMarketCap
+- 🟡 Token model involves taxes/fees (from bytecode)

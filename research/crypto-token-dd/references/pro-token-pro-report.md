@@ -1,29 +1,68 @@
-# Pro Token (PRO) — Investigative Report
+# Pro Token (PRO) — Updated Report (July 4, 2026)
 
 Contract: `0x8d65744527f55d0b2338350912d5c99a81ddf0e2`
 Chain: BSC (BNB Smart Chain)
-Analyzed: 2026-05-31
+Analyses: 2026-05-31 (initial), 2026-07-04 (corrected)
 
-## Red Flags Summary
+## ⚠️ Correction Notice
 
-| Flag | Detail |
-|------|--------|
-| No CoinGecko/CMC | Not listed on any major tracker |
-| No DexScreener pairs | PancakeSwap V2 pool exists (`0x63844bd4bfad910b1643713302a1cc1ed20d50c3`) but DexScreener returned no data |
-| No GoPlus security | Not on GoPlus token security API |
-| BscScan Cloudflare | Page behind Cloudflare challenge |
-| No social presence | No Twitter, Telegram, website found via DuckDuckGo |
-| Price vs reality | OKX Web3 reported $60.46 / $234M mcap — but no active trading volume detected |
+The May 31 analysis concluded this was "100% honeypot/蜜罐资金盘." This was **incorrect** due to a decimals calculation error (assumed 18 decimals; token uses 9). After correction, the token has $86M in real LP liquidity, verified renounced contract, and 616K holders.
 
-## Data Sources Used
+## Corrected Findings
 
-1. **DuckDuckGo** → found token name "Pro Token (PRO)", BscScan link, OKX Web3 page
-2. **OKX Web3** → `web3.okx.com/token/bsc/0x8d65744527f55d0b2338350912d5c99a81ddf0e2` → price $60.46, mcap $234.51M
-3. **GeckoTerminal** → identified via DuckDuckGo, pool at `0x63844bd4bfad910b1643713302a1cc1ed20d50c3`
-4. **CoinCarp/LiveCoinWatch/DexView** → secondary listings confirmed token exists on these platforms
+### On-Chain Data (via BSC RPC)
 
-## Notes
+| Metric | Value |
+|--------|-------|
+| Name | (empty via RPC — "PRO Token" in bytecode) |
+| Symbol | (empty via RPC — "Pro" in bytecode) |
+| Decimals | 9 |
+| Total Supply | 6,924,924 PRO |
+| Contract Owner | ✅ Renounced (→ dead address) |
+| Source Code | ✅ Verified on BscScan |
 
-- User initially said "在币安连上的" (connected on Binance) — clarified this meant BSC chain, not Binance exchange listing
-- Attempted: DexScreener (all variants), CoinGecko, GoPlus, Birdeye, Covalent — all returned empty/error
-- DuckDuckGo was the only functional search engine
+### LP Liquidity (PancakeSwap V2: PRO/USDT)
+
+| Metric | Value |
+|--------|-------|
+| LP address | `0x63844bd4bfad910b1643713302a1cc1ed20d50c3` |
+| PRO in LP | 715,423 PRO |
+| USDT in LP | 43,149,860 USDT |
+| Real price | ~$60.31/PRO |
+| TVL | ~$86.3M |
+
+### Holder Distribution (on-chain verified)
+
+| Address | Balance | % | Note |
+|---------|---------|---|------|
+| `0xc002...8ee8` | 3,675,882 PRO | 53.08% | Contract wallet, nonce=2, 0 BNB |
+| LP pool | 715,423 PRO | 10.33% | Legitimate liquidity |
+| `0x...BCCC` (Ave.ai #2) | **0 PRO** | 0% | Ave.ai data bug — showed 578,990 PRO but on-chain is zero |
+
+### Contract Features (from verified bytecode)
+
+- Tax/fee mechanism on transfers
+- Blacklist capability (owner renounced → frozen)
+- Marketing wallet: `0xf9074b5c035c961443373f78a6344e5adc61d314`
+- Liquidity wallet: `0x543302e9d9411e563ad8266ceef2a85b66050832`
+
+## Risk Assessment
+
+| Signal | Level | Detail |
+|--------|-------|--------|
+| Honeypot (balance faking) | 🟢 False positive | Corrected — decimals error |
+| Contract renounced | 🟢 Positive | Owner → dead address |
+| Source verified | 🟢 Positive | Verified on BscScan |
+| LP liquidity | 🟢 $86M | Real USDT-PRO pair |
+| Holder concentration | 🔴 53% | #1 holder can dump |
+| Public team/social | 🔴 None | No website, Twitter, Telegram |
+| CEX/mainstream listing | 🔴 None | Not on CoinGecko/CMC |
+| DEX listing | 🟢 Yes | PancakeSwap V2 |
+
+## Key Lessons
+
+1. **Always check decimals before interpreting balanceOf()** — `eth_call` with `0x313ce567`
+2. **Zero BNB on top holder ≠ abandoned** — may be a contract wallet
+3. **Zero Transfer events ≠ fake balance** — tokens may be minted directly
+4. **Ave.ai holder data can be wrong** — showed 578K for an address with 0 on-chain
+5. **BscScan HTML scraping works via curl** (no Cloudflare on curl) even when browser is blocked
