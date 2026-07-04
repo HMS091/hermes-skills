@@ -305,6 +305,31 @@ After downloading, parse JSON or extract text via `head -c`, `grep`, or `sed` (n
 
 Navigate directly to Yahoo Finance quote pages — they render clean accessibility trees even without JavaScript-heavy interaction:
 
+> **⚠️ Yahoo consent wall (common blocker):** Yahoo increasingly redirects to `consent.yahoo.com/v2/collectConsent` when accessed from datacenter IPs. When this happens, the page shows a privacy/consent dialog with no price data. **Open the consent page snapshot** — if the title starts with "Ihre Datenschutzeinstellungen" (German by default) or "Your Privacy Choices", you've hit the wall. **Do not retry** — navigate to **Reuters** instead.
+
+#### Fallback: Reuters Stock Pages
+
+When Yahoo Finance is blocked by a consent wall, navigate directly to Reuters stock pages. They serve clean accessibility trees from non-US datacenters without consent redirects:
+
+```python
+browser_navigate(url="https://www.reuters.com/markets/companies/NVDA.OQ/")
+```
+
+Reuters page layout provides the same data points, though at different positions:
+
+| Data Point | Accessibility Tree Location | Notes |
+|-----------|---------------------------|-------|
+| Price | `StaticText` inside the equity quote block after the heading | Same as Yahoo |
+| Change | `StaticText "price change"` then sibling `StaticText` | Distinct label |
+| Change % | `StaticText "percent change"` then sibling `StaticText` | Distinct label |
+| Key Statistics | `list "Key Statistics"` — **numeric values are inside `<strong>` elements** which don't render in the snapshot | Bid/Ask, Previous Close, Open, Volume, Market Cap are visible but their values may be truncated |
+| News | News list with `link`, `paragraph`, and `time` — scroll down to load more | Rich headlines with summaries |
+| Market Indices | SPX, IXIC, DJI, STOXX, FTSE, N225 all visible in the top bar | Useful for macro context |
+
+**Key advantage over Yahoo:** The news section on Reuters stock pages is always loaded (no "Load more" interaction needed for the first batch of headlines). Each news item includes a full summary paragraph, not just a headline.
+
+**Pitfall — Reuters key stats are truncated:** The Key Statistics list items show labels (Bid/Size, Ask/Size, Previous Close, Today's Open, Today's Volume, Market Cap, P/E Ratio, Dividend Yield) but the actual **numeric values are inside `<strong>` tags** that the text-based snapshot omits. For key stats, supplement with a separate curl command to the Nasdaq API if needed.
+
 ```
 browser_navigate(url="https://finance.yahoo.com/quote/NVDA/")
 ```
@@ -410,6 +435,26 @@ volume = int(float(vol_str)) if vol_str else None
 
 When the data-collection script fails for one or more tickers:
 
+#### Option A — Reuters Markets Page (single page, all context)
+
+Navigate once to `reuters.com/markets/` — this single page shows:
+- All major US indices: SPX (7,483), DJIA (52,900), IXIC (25,832)
+- European/Asian indices: STOXX, FTSE, N225
+- The top market-moving headline with a full summary paragraph
+- A scrollable news list with direct stock/commodity links
+
+This is the **most efficient option** when you need macro context plus multiple ticker news from a single navigation.
+
+```
+1. browser_navigate to reuters.com/markets/ → get all indices + top market news
+2. Scroll down and extract relevant news headlines for NVDA/TSLA/gold
+3. Use the pre-run script prices (they're usually correct for close-of-day data)
+4. Write the briefing using index data and news from the single Reuters page
+5. Run the HTML generator
+```
+
+#### Option B — Yahoo Finance pages (when consent wall not blocking)
+
 ```
 1. browser_navigate to finance.yahoo.com/quote/NVDA/ → extract price, change, pct, volume
 2. browser_navigate to finance.yahoo.com/quote/TSLA/ → extract price, change, pct, volume
@@ -449,6 +494,8 @@ Save it at `/opt/data/briefings/{date}_raw.json` **before** running `generate_br
 
 ## Common Pitfalls
 
+- **Yahoo Finance consent wall blocks price extraction**: Yahoo redirects datacenter IPs to `consent.yahoo.com/v2/collectConsent` — the page shows only a privacy dialog, no prices. Check the snapshot title for "Ihre Datenschutzeinstellungen" or "consent.yahoo.com" in the URL. **Do not retry Yahoo** — switch to Reuters stock pages (`reuters.com/markets/companies/{TICKER}.OQ/`) which work without consent walls.
+- **Browser timeout after multiple navigations in one session**: When making 3+ sequential `browser_navigate` calls in a cron job, later calls may timeout at 60s. If you need data from multiple pages, **batch curls for APIs** (Nasdaq API, Yahoo Chart API) for price data and use the browser only for the primary page. Alternative: navigate back with `browser_back()` to avoid new session overhead, or prioritize one comprehensive source (Reuters Markets page) that shows multiple tickers' context at once.
 - **Script referenced but never created**: The cron job may have been configured with `"script": "collect.py"` but the file was never written. This causes silent "Script not found" errors every run.
 - **Script placed in wrong directory**: The cronjob tool accepts ONLY scripts relative to `~/.hermes/scripts/`. Absolute paths like `/opt/data/scripts/my-script.sh` are rejected with `"Script path must be relative to ~/.hermes/scripts/"`. Always copy scripts to `~/.hermes/scripts/` and reference them by filename only. See "How Cron Jobs with Script Work" above.
 - **PATH not set in cron scripts**: Cron jobs inherit a minimal PATH. If the script calls `hermes` or `uv`, explicitly set `export PATH="/opt/data/home/.local/bin:$PATH"` or the script will fail with "command not found".
