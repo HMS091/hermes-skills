@@ -509,6 +509,99 @@ See `references/commercial-clone-script-research.md` for detailed vendor landsca
 
 Pattern for researching a company or service launch — extracting launch dates, growth data, business model, and cross-referencing claims from press releases and media coverage. Used when the user asks "research X business" or "find launch data for Y."
 
+### Chinese Software Company Investigation (中国软件公司调研)
+
+Specialized pattern for investigating Chinese companies/software where the developer is listed as an individual. This requires multiple data sources since Chinese business registration and app store data may show different owners.
+
+#### Primary Chinese Data Sources (that work from this environment)
+
+| Source | URL | Data Available | Bypass Needed |
+|--------|-----|---------------|---------------|
+| **爱企查** (Baidu) | `aiqicha.baidu.com/company_basic_<ID>` | 法定代表人, 注册资本, 实缴资本, 曾用名, 统一社会信用代码, 股东信息 | DuckDuckGo HTML search to find the company ID first |
+| **企查查** | `www.qcc.com/firm/<hash>.html` | Same as 爱企查 but with stronger anti-bot | Heavily JS-protected; curl returns scrambled data |
+| **iOS App Store** | `apps.apple.com/cn/app/<name>/id<number>` | Individual developer name, seller info | DuckDuckGo HTML search to find the App ID, then Scrapling Fetcher for structured data |
+| **DuckDuckGo HTML** | `html.duckduckgo.com/html/?q=...` | Find all of the above | Most reliable search engine from this environment |
+| **Wayback Machine** | `web.archive.org/web/<timestamp>/<url>` | Historical versions of Chinese websites showing company name changes | Works well for Chinese sites that are otherwise blocked |
+| **Direct Sina News** | `news.sina.cn/sx/...` or `news.sina.com.cn/sx/...` | Funding announcements, company background | Accessible via Scrapling Fetcher |
+
+#### Investigation Workflow
+
+1. **Phase 1: DuckDuckGo HTML reconnaissance**
+   ```bash
+   # Using Scrapling Fetcher (preferred — unset proxy env vars first)
+   import os, sys
+   for k in ['http_proxy','https_proxy','HTTP_PROXY','HTTPS_PROXY']:
+       os.environ.pop(k, None)
+   sys.path.insert(0, '/opt/data/scrapling-venv/lib/python3.13/site-packages')
+   from scrapling.fetchers import Fetcher
+   
+   # Search for the app/company name
+   p = Fetcher.get(f'https://html.duckduckgo.com/html/?q={quote("关键词")}', timeout=15)
+   text = p.get_all_text()
+   # This returns clean text with result titles, URLs, and snippets
+   lines = [l.strip() for l in text.split('\n') if l.strip() and len(l.strip()) > 20]
+   ```
+
+2. **Phase 2: Company registration lookup via 爱企查**
+   - DuckDuckGo HTML search for `关键词 爱企查` or `公司全称 法定代表人`
+   - Follow the aiqicha.baidu.com link; the basic page is partially server-rendered
+   - **Key data points** to extract:
+     - **法定代表人** — the legally registered representative (may differ from actual founder)
+     - **注册资本 vs 实缴资本** — paid-in capital reveals true company strength
+     - **曾用名** — former company names (common for pivoting companies)
+     - **成立日期** — helps assess maturity
+     - **统一社会信用代码** — unique identifier
+   - **Pitfall**: 爱企查's detailed data is JS-rendered; only basic info (法定代表人, 注册资本, 成立日期, 地址) is in the initial HTML. Use the Scrapling Fetcher's `.get_all_text()` to extract what's available.
+
+3. **Phase 3: App Store developer identity**
+   - Search DuckDuckGo for `apps.apple.com <app name>` to find the App Store ID
+   - Fetch the App Store page with Scrapling Fetcher
+   - Extract `developerName` from JSON-LD or CSS:
+     ```python
+     html = p.html_content
+     import re
+     # Check for developerName in JSON-LD
+     dev = re.findall(r'"developerName":\s*"([^"]*)"', html)
+     # Or check the meta description
+     metas = re.findall(r'<meta[^>]*>', html)
+     ```
+   - **Common finding**: iOS App Store may list an individual developer ("杰 黄" = 黄杰) while the company registration lists someone else (罗静). This suggests the app was published under the founder's personal account while the company uses a family/partner as legal representative.
+
+4. **Phase 4: Historical comparison via Wayback Machine**
+   - Check `web.archive.org/web/available?url=<company-site>.com` for available snapshots
+   - Compare older snapshots of the company website:
+     - Old copyright footers may show the **former company name** (曾用名)
+     - Changes in about/team pages reveal organizational evolution
+   - **Technique**: Search different timestamps (e.g., 20250501, 20240101) to track company name changes over time
+
+5. **Phase 5: Funding & media coverage**
+   - Search for funding announcements (融资) via DuckDuckGo
+   - **Sina News** articles (`news.sina.cn/sx/...`) are accessible via Scrapling Fetcher and may contain:
+     - Developer company name (which may differ from the current company name)
+     - Funding amount and sources
+     - Future plans (sub-brands, expansion)
+   - Check the article source (来源) field — many Chinese funding articles originate from press release distributors like 点财网
+
+#### Key Signals for Assessing a Chinese Software Company
+
+| Signal | What to Check | Meaning |
+|--------|---------------|---------|
+| **实缴资本 vs 注册资本** | 注册资本=100万, 实缴=25.4万 | Only 25% paid in — limited financial strength |
+| **法定代表人 vs 开发者** | 法人=罗静, App Store开发者=黄杰 | Founder likely operates through family/partner's registration |
+| **融资阶段** | "数百万天使轮" | Usually ¥200-400万 range, early stage |
+| **下载量 claims** | "全网下载量突破1000万" | May be inflated; cross-check with app store rankings |
+| **服务规模 claims** | "覆盖95%城市, 8万+陪诊师" | Typical marketing language; difficult to verify independently |
+| **知识产权** | 商标数量, 软著数量 | 24商标+9软著 = significant IP investment for a small company |
+
+#### Pitfalls
+
+- **Almost all Chinese search engines block automated requests**: Baidu, Sogou, 360 all return CAPTCHAs. Only DuckDuckGo HTML (`html.duckduckgo.com`) is reliably accessible from this environment.
+- **爱企查/企查查 require JS for full data**: Only basic registration info is in server-rendered HTML. Detailed shareholder lists, change history, and financial data need a real browser.
+- **Chinese company name changes are common**: The company may have renamed when pivoting from e-commerce to tech services. Always check 曾用名.
+- **iOS App Store developer may differ from company legal person**: An individual developer account ("杰 黄") suggests the app was published personally, not through the company's enterprise account. This is a yellow flag for scale — enterprise accounts are used by larger operations.
+- **实缴 capital is the real signal**: 注册资本 100万 with only 25.4万 实缴 means the company is operating on thin capitalization. This is a risk indicator.
+- **DuckDuckGo HTML may also get blocked over time**: Detect by checking result length — if `get_all_text()` returns <500 chars with no result URLs, try DuckDuckGo Lite instead.
+
 ### Key Differences from SaaS/Platform Comparison
 
 | Dimension | SaaS Comparison | Business Research |
