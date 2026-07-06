@@ -98,16 +98,75 @@ This environment has a Clash proxy (192.168.1.88:7890) that enables search acces
    - Each aria-label includes source name and relative age ("2 days ago") — the full string preserves metadata
    - Run multiple queries for subtopics (stock news, product launches, competitors) for broader coverage
 
-3. **Direct knowledge + curl to known platforms**
+4. **✅ Apple App Store / iTunes API** (reliable when all search engines blocked)
+   When DuckDuckGo, Google, AND Bing all return CAPTCHAs/block pages, the Apple App Store API works without any anti-bot protection:
+
+   ```bash
+   # Search for an app by keyword in a specific country
+   curl -sL "https://itunes.apple.com/search?term=Dine+Japan&country=JP&entity=software&limit=5"
+
+   # Lookup by developer or app ID
+   curl -sL "https://itunes.apple.com/lookup?id=964735827&country=JP"
+   ```
+
+   **What you get:** Full app name, bundle ID, developer name, genre, price, rating, user rating count, full description, advisories, supported devices -- all as clean JSON.
+
+   **Key fields:**
+   | JSON Field | Meaning |
+   |-----------|---------|
+   | `trackName` | Current app name (may differ from brand name) |
+   | `artistName` | Developer/publisher |
+   | `sellerName` | Selling entity |
+   | `bundleId` | Reverse-domain identifier -- reveals original brand name |
+   | `description` | Full App Store listing -- often contains pricing, business model, feature list |
+   | `averageUserRating` / `userRatingCount` | Rating + volume -- for competitive positioning |
+   | `formattedPrice` | Free or paid |
+   | `trackViewUrl` | Direct link for user verification |
+
+   **Use cases from session:** Researching a Japanese app when no search engine worked; getting structured business model data from the App Store description; finding bundle ID (`co.dinewith.Dine`) to identify the original brand name.
+
+   **Pitfalls:**
+   - Only returns iOS apps -- not web-only services
+   - `term` search is fuzzy -- may return unrelated results
+   - Country filter (`country=JP`) is essential for region-specific apps
+   - No auth needed but has rate limits (generous)
+
+5. **✅ Direct domain landing page mining** (when all search engines blocked)
+   When you can't search at all, try the most likely domain name directly:
+
+   ```bash
+   curl -sL "https://<brand>.app" -H "User-Agent: Mozilla/5.0" | head -100
+   ```
+
+   **Workflow:**
+   1. Try likely TLDs: `.app`, `.com`, `.jp`, `.co.jp`, `.io`
+   2. Read server-rendered meta tags from the HTML source: `<title>`, `<meta name="description">`, `<meta property="og:*">`
+   3. Check for embedded JSON data in `<script>` tags: `__NUXT__`, `__NEXT_DATA__`, `window.__INITIAL_STATE__`
+   4. Look for `window.location.href` redirects to find the actual active domain
+
+   **SPA data extraction pattern (from session):**
+   ```python
+   import re
+   html = # the curl output
+   # Nuxt.js: full page data embedded as JSON
+   m = re.search(r'window\.__NUXT__\s*=\s*({.*?});', html, re.DOTALL)
+   # Next.js:
+   m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
+   ```
+   SSG frameworks render the page tree as JSON at build time -- the static HTML already contains the full content structure even before JS executes.
+
+   **Pitfalls:** Many domains are parked/squatted (check for "for sale" signals); redirect chains mean the real page is elsewhere; some Nuxt pages only render a minimal shell.
+
+6. **Direct knowledge + curl to known platforms**
    - For each candidate, curl their pricing/signup page directly
    - Extract: signup method, free specs, traffic limits, credit card requirement
    - Use known regional marketplaces (see Regional Marketplace KB below)
 
-4. **GitHub API search** (works from Docker)
+7. **GitHub API search** (works from Docker)
    - `curl -sL "https://api.github.com/search/repositories?q=<keyword>&sort=stars&per_page=10"`
    - Useful for discovering open-source projects in a domain
 
-5. **Exchange rate API** for cross-currency comparisons:
+8. **Exchange rate API** for cross-currency comparisons:
    ```bash
    curl -s "https://api.exchangerate-api.com/v4/latest/HKD" -x http://192.168.1.88:7890
    ```
@@ -209,7 +268,7 @@ Common platforms for free Docker deployment:
 - **Prioritize actionable results**: End with a clear "what to do next" recommendation
 
 ## Pitfalls
-- **All search engines blocked scenario**: In this Docker environment, DuckDuckGo, Google, AND Bing can all simultaneously block automated queries (DDG returns CAPTCHA, Google redirects to support page, Bing returns empty). When the full DDG HTML is blocked, **first try DuckDuckGo Lite** (`lite.duckduckgo.com/lite/`) as an intermediate fallback — it uses simpler HTML that's less likely to trigger CAPTCHA. Only if DuckDuckGo Lite also fails should you move to Google News RSS. Only if Google News RSS fails should you abandon search engines entirely and shift to: (1) direct-known-vendor curl scraping, (2) GitHub API for open-source baselines, (3) domain knowledge synthesis. Do NOT keep retrying the same blocked engines — it wastes time.
+- **All search engines blocked scenario**: In this Docker environment, DuckDuckGo, Google, AND Bing can all simultaneously block automated queries (DDG returns CAPTCHA, Google redirects to support page, Bing returns empty). When the full DDG HTML is blocked, **first try DuckDuckGo Lite** (`lite.duckduckgo.com/lite/`) as an intermediate fallback — it uses simpler HTML that's less likely to trigger CAPTCHA. Only if DuckDuckGo Lite also fails should you try **Google News RSS** and **Apple App Store API** (for app/mobile-platform research). If those also fail or don't apply, shift to: (1) **direct domain landing page mining** -- curl the most likely domain name and read server-rendered meta tags + embedded JSON, (2) direct-known-vendor curl scraping, (3) GitHub API for open-source baselines, (4) domain knowledge synthesis. Do NOT keep retrying the same blocked engines — it wastes time.
 - **Search engines blocked from Docker**: DuckDuckGo, Google, Bing all anti-bot from container IPs. Always try proxy first, but accept that search may fail and fall back to known-platform knowledge. **DuckDuckGo HTML mode now returns CAPTCHA anomaly pages (~14KB, no result links) for many queries — check for `result__a` class presence to detect blocks.**
 - **Proxy dependency**: The Clash proxy (192.168.1.88:7890) is on an OpenWRT router connected to the NAS. It may be slow or temporarily unreachable. Do NOT permanently remove proxy config — backup before modification
 - **curl vs Python for page fetching**: Use `curl -sL` for initial connectivity checks. For content extraction, pipe from curl to python3. DO NOT use Python `requests`/`urllib` for first attempts — they have different TLS fingerprints and may trigger different blocking
@@ -504,6 +563,70 @@ This works because even JS-heavy landing pages have server-rendered meta tags fo
 ### Reference File
 
 See `references/commercial-clone-script-research.md` for detailed vendor landscape, pricing comparison, and evaluation checklists (OnlyFans clone category used as worked example).
+
+### Apple App Store Reviews API (获取真实用户评价)
+
+When you need **real user reviews** (not just ratings) for an app — the App Store RSS API returns the latest 50 reviews as clean JSON:
+
+```bash
+# Get most recent 50 reviews for an app
+curl -sL "https://itunes.apple.com/jp/rss/customerreviews/page=1/id={APP_ID}/sortBy=mostRecent/json?l=en"
+
+# l=en → English-variant JSON labels (same data)
+# sortBy=mostRecent → WORKS (returns 50 reviews)
+# sortBy=mostHelpful → DOES NOT WORK (returns 0 entries)
+# page=1 → only page 1 works; pages 2+ return empty — max 50 reviews
+```
+
+**Parsing script:**
+```python
+import sys, json
+data = json.load(sys.stdin)
+entry = data.get('feed', {}).get('entry', [])
+for e in entry:
+    if 'im:name' in e and e['im:name'].get('label','') == 'iTunes Store':
+        continue  # skip the app entry itself
+    rating = int(e.get('im:rating',{}).get('label','3'))
+    title = e.get('title',{}).get('label','')
+    content = e.get('content',{}).get('label','')
+    version = e.get('im:version',{}).get('label','')
+    date = e.get('updated',{}).get('label','')
+```
+
+**Critical: Distinguish developer ID from app track ID.** They are sequential numbers and easy to confuse:
+- From `search?term=...&country=JP`: use `results[].trackId` (NOT `artistId`)
+- The App Store URL also contains the trackId: `/id{trackId}`
+- Example: developer Mrk & Co has artistId `964735827`, but the D³ app has trackId `964735828`
+
+**How to find the trackId:**
+```bash
+curl -sL "https://itunes.apple.com/search?term=brand+name&country=JP&entity=software&limit=5"
+# → results[].trackId is the app ID for reviews
+# → results[].bundleId reveals the original brand name
+```
+
+**Review classification for user-facing reports:**
+When delivering reviews to a user who wants to see both positive and negative:
+```python
+good, bad, mixed = [], [], []
+for e in entry:
+    rating = int(e.get('im:rating',{}).get('label','3'))
+    if rating >= 4: good.append(e)
+    elif rating <= 2: bad.append(e)
+    else: mixed.append(e)
+```
+Recent-50-sample bias warning: in a rebranded app (e.g., Dine→D³), the most recent 50 reviews may be **76% 1-2 star** due to a recent unpopular update, while the overall rating (3.86/5 from 11K reviews) is pulled up by older reviews. Always note this discrepancy in the report.
+
+**Pitfalls:**
+- Only **mostRecent** sort works — `mostHelpful` returns 0 entries silently
+- **Only page 1 works** — pages 2+ return feeds with 0 entries in the entry array
+- The API returns **at most 50 reviews** total, regardless of how many ratings the app has
+- **No auth needed** but has generous rate limits
+- The `l=en` parameter only changes JSON label names (e.g., `im:rating` vs `im:rating`), not the review language — reviews remain in the user's original language
+- Review content is truncated to ~600 chars in the API response
+- **Review date/timezone**: dates are in US Pacific time (`-07:00`), not local to the App Store country
+- Empty `author.name` field is normal — Apple anonymizes reviewer names
+- Apps that have rebranded (same bundleId, new name) retain old reviews — the `/customerreviews` endpoint returns reviews for the current app listing regardless of name changes
 
 ## Special Application: Business & Company Research (公司/产品研究)
 

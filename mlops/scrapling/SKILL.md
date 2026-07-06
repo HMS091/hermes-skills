@@ -118,7 +118,22 @@ for k in ['http_proxy','https_proxy','HTTP_PROXY','HTTPS_PROXY','all_proxy','ALL
     os.environ.pop(k, None)
 ```
 
-The wrapper (`scrapling` CLI) and helper script handle this automatically.
+The wrapper (`scrapling` CLI) handles proxy env vars automatically.
+
+## PITFALL: Helper script ModuleNotFoundError
+
+Calling the helper script directly (`/opt/data/scripts/scrapling_helper.py`) uses system Python, NOT the venv. Result:
+
+```
+ModuleNotFoundError: No module named 'scrapling'
+```
+
+**Fix:** Always invoke the helper through the venv Python explicitly:
+```bash
+/opt/data/scrapling-venv/bin/python /opt/data/scripts/scrapling_helper.py fetch "https://example.com"
+```
+
+Or bypass the helper entirely — use direct Python (preferred for complex extractions).
 
 ## Installation Paths
 - venv: `/opt/data/scrapling-venv/`
@@ -138,20 +153,22 @@ scrapling extract fetch "https://spa-site.com" content.md --network-idle
 
 ## Python Usage (via Hermes terminal)
 
+❗ Always use `/opt/data/scrapling-venv/bin/python` — the helper script uses system Python and will fail with ModuleNotFoundError.
+
 ```python
 from hermes_tools import terminal
 
-# Basic fetch
-r = terminal('/opt/data/scripts/scrapling_helper.py fetch "https://example.com"')
+# Basic fetch (use venv Python)
+r = terminal('/opt/data/scrapling-venv/bin/python /opt/data/scripts/scrapling_helper.py fetch "https://example.com"')
 
 # Stealthy with Cloudflare bypass
-r = terminal('/opt/data/scripts/scrapling_helper.py stealthy "https://site.com" --css ".content"')
+r = terminal('/opt/data/scrapling-venv/bin/python /opt/data/scripts/scrapling_helper.py stealthy "https://site.com" --css ".content"')
 
 # Dynamic (JS rendering)
-r = terminal('/opt/data/scripts/scrapling_helper.py dynamic "https://site.com" --output /tmp/page.md')
+r = terminal('/opt/data/scrapling-venv/bin/python /opt/data/scripts/scrapling_helper.py dynamic "https://site.com" --output /tmp/page.md')
 
 # Parse offline HTML
-r = terminal('/opt/data/scripts/scrapling_helper.py parse /tmp/page.html --css "h1" --css ".price"')
+r = terminal('/opt/data/scrapling-venv/bin/python /opt/data/scripts/scrapling_helper.py parse /tmp/page.html --css "h1" --css ".price"')
 ```
 
 ## Python Usage (direct)
