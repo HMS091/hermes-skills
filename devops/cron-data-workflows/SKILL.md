@@ -484,6 +484,7 @@ Save it at `/opt/data/briefings/{date}_raw.json` **before** running `generate_br
 
 ## Reference Files
 
+- `references/headline-price-estimation.md` — When all price APIs fail (including browser/Nasdaq curl/Yahoo API), estimate the asset price from Google News RSS headline language. Examples for gold (~$4,080/oz estimated from "$4,000 floor" and "$4,100 fair value" headlines), NVDA, and TSLA. Includes keyword-to-price mappings and the "Three-Failure Check" for when to use it.
 - `references/daily-briefing-recovery.md` — Full case study of a daily briefing pipeline recovery when the data-collection script was missing or produced bad prices. Includes raw data format schemas, the briefing template, a price-data enrichment workflow (Yahoo Finance fallback), and lessons from the Jun 2026 sessions.
 - `references/yahoo-finance-chart-api.md` — Reference for the Yahoo Finance Chart API endpoint: supported symbols, response structure, change calculation, rate limits. Used as primary fallback data source when Nasdaq/Finviz APIs are rate-limited or proxy is down.
 - `references/gold-price-sources.md` — Gold price verification reference: reliable vs unreliable sources, price range sanity checks, multi-source verification pattern, DXY/Fed correlation. Added Jun 2026 after gold-api.com produced a $4,098 price that was $1,150 above actual spot.
