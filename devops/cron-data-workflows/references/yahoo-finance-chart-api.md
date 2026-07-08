@@ -174,3 +174,36 @@ elif len(valid_closes) == 1:
 ```
 
 This is especially common with `range=1mo` for certain symbols (GC=F gold futures, crypto pairs). Always check for None before using the meta fields.
+
+## Pitfall: Gold Futures `chartPreviousClose` (1d vs 5d Discrepancy)
+
+For gold futures (`GC=F` or `GC%3DF`), the `meta.chartPreviousClose` from a `range=1d` call may differ from the actual previous trading day's close visible in the 5d data. Observed discrepancy:
+
+| Endpoint | `meta.chartPreviousClose` | Close array (previous day) |
+|----------|--------------------------|---------------------------|
+| `range=1d&interval=1d` | $4,157.40 | (no prior close in array) |
+| `range=5d&interval=1d` | $4,068.30 | $4,155.10 (index -2) |
+
+**Root cause:** The 1d endpoint's `chartPreviousClose` may be a settlement or official close price set by the COMEX exchange, while the actual last trading session's closing price (visible in the 5d close array) can differ by ~$2-40 for gold futures.
+
+**Fix:** For gold futures, always calculate daily change from the 5d close array (comparing the last two closes) rather than from the 1d endpoint's `meta.chartPreviousClose`. Use this pattern:
+
+```python
+# Get gold data with 5d range
+response = urlopen(Request("https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?range=5d&interval=1d", headers=h))
+data = json.loads(response.read().decode())
+r = data['chart']['result'][0]
+quotes = r['indicators']['quote'][0]
+closes = [c for c in quotes['close'] if c is not None]
+
+# Use closes array for change, not meta.chartPreviousClose
+today_close = closes[-1]
+prev_close = closes[-2]  # Previous trading day's close from array
+change = today_close - prev_close
+change_pct = (today_close - prev_close) / prev_close * 100
+
+# Meta fields for non-change data are still reliable:
+fifty_two_high = r['meta'].get('fiftyTwoWeekHigh')
+fifty_two_low = r['meta'].get('fiftyTwoWeekLow')
+volume = r['meta'].get('regularMarketVolume')
+```
