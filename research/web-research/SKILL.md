@@ -750,6 +750,7 @@ Specialized pattern for investigating Chinese companies/software where the devel
 See `references/business-company-research.md` for full workflow, curl commands for each source type, browser-based corporate site reconnaissance (trust centers, transparency reports, blog/annual wrap-up PDF discovery), PDF download & parsing with pymupdf, and pitfalls (Cloudflare, private company data limitations, CEO title changes).
 
 **References**:
+- `references/chinese-o2o-platform-research.md` — Chinese O2O platform business model analysis: platform-labor relationship (个体户模式), commission structures, financial data triangulation (GMV/valuation cross-source verification), 涉黄 risk assessment, compliance countermeasures, working Chinese news sources (36kr, 投中网, 新浪财经, 网易号), labor classification risk, IPO readiness assessment. Built from 东郊到家 deep-dive.
 - `references/platform-scam-investigation.md` — Systematic approach for investigating potentially fraudulent online platforms: WHOIS recon, red flag checklist (Gmail+Telegram support, anonymous registration, referral codes), grey market vs scam distinction, worked example (feiyangka.com virtual card platform)
 - `references/scraping-docker-deploy-platforms.md` — Multi-site bulk check pattern for free Docker deploy platforms
 - `references/scraping-gpu-price-sources.md` — GPU/electronics real-time price scraping (DCFever HK, Goofish, Taobao, JD)
