@@ -217,6 +217,65 @@ Build a structured Chinese report with:
 4. **If VPN-specific**: recommend the right Docker VPN container (wg-easy, Algo, Tailscale, Outline)
 5. **Actionable next step**: what to do now
 
+#### Report Delivery Formats
+
+Choose the format based on the user's context:
+
+| Context | Format | How |
+|---------|--------|-----|
+| **Chat-only conversation** | Markdown formatted response | Direct reply with tables and headings |
+| **File to download** | Word (.docx) via python-docx | Structured with tables, bold/key highlights, sections, color-coded summary |
+| **File on NAS** | .docx file → SSH/SCP or SMB | Generate docx, then transfer to NAS share path |
+
+**Word document generation pattern** (python-docx):
+
+```python
+from docx import Document
+from docx.shared import Pt, Inches, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT
+
+doc = Document()
+style = doc.styles['Normal']
+style.font.name = 'Arial'
+style.font.size = Pt(11)
+
+# Title
+title = doc.add_heading('报告标题', level=0)
+title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+# Sections with headings
+doc.add_heading('一、章节标题', level=1)
+
+# Data tables (preferred over prose for comparison data)
+table = doc.add_table(rows=N, cols=M, style='Light Shading Accent 1')
+table.alignment = WD_TABLE_ALIGNMENT.CENTER
+for i, (k, v) in enumerate(data):
+    table.rows[i].cells[0].text = k
+    table.rows[i].cells[1].text = v
+
+# Bold key findings
+p = doc.add_paragraph()
+run = p.add_run('核心发现：')
+run.bold = True
+run.font.color.rgb = RGBColor(0xcc, 0x00, 0x00)  # red for warnings
+p.add_run('详细描述')
+
+# Bullet lists
+doc.add_paragraph('项目一', style='List Bullet')
+
+doc.save('/tmp/report.docx')
+```
+
+**Key formatting rules when writing Chinese reports:**
+- Always use `Light Shading Accent 1` table style for readability
+- Bold the header row in tables
+- Color-code critical warnings in red (0xcc0000)
+- Keep one key insight per paragraph — no dense walls of text
+- Use bullet lists for enumerations, tables for comparisons
+- Include a "数据来源" section at the end with all source URLs
+- ⚠ **Table row count trap**: `doc.add_table(rows=N, cols=M)` creates rows 0 through N-1. If you have H header items + D data items, set N = H + D, NOT len(data) alone. Indices are 0-based: header at row 0, data at rows 1 through N-1. IndexError means row count mismatch.
+
 ### Platform Knowledge Base (Docker Deploy Platforms)
 Common platforms for free Docker deployment:
 

@@ -122,8 +122,26 @@ Track these claims and their verification:
 6. 白皮书 — Publish a compliance whitepaper (平台商户违规治理白皮书) for investors
 ```
 
-**Key insight from 东郊到家 case:**
+**Key insight from 东郊到家 case (enhanced):**
 The platform's core contradiction is that upsells (加钟, 特殊服务) drive GMV, but compliance requires suppressing them. The tension between revenue growth and IPO-grade compliance is the central strategic dilemma for these platforms.
+
+**Specific compliance tools deployed by 东郊到家 (from 2025 public reporting):**
+| Tool | Description |
+|------|-------------|
+| AI朗清预警系统 | Real-time monitoring of technician location, service duration, price anomalies |
+| 智能工牌 | Hardware badge with GPS, facial recognition, encrypted audio recording |
+| AI敏感词识别 | Real-time detection of "private price hikes", "improper contact" in service dialogues |
+| 一键安全呼 | Emergency button linking to security center with live positioning |
+| 大数据风险模型 | Claims 400% improvement in risk prediction accuracy |
+| 双备案机制 | Cross-references public security, industry & commerce, and vocational certification databases |
+| 48小时客诉响应 | Commitment to resolve complaints within 48 hours; escalated to police if verified |
+
+**Brand rehabilitation strategy:**
+- Spokesperson: Zhang Yingying (张莹莹), world table tennis champion
+- Terminology: 理疗师 (therapist) instead of 技师 (technician)
+- Published: 《平台商户违规治理白皮书》 (Platform Merchant Compliance Whitepaper)
+- Community: Free massage events for elderly, charity health activities
+- Third-party auditor: Independent supervision organization for random service inspections
 
 ### 3.2 Labor Classification Risk (劳动关系风险)
 
@@ -152,9 +170,9 @@ O2O platforms collect: home addresses, real-time location, service history, paym
 | **投中网** | chinaventure.com.cn | VC/PE industry | ✅ Yes | Investor perspective, funding data |
 | **网易号** | 163.com/dy/article/... | Self-media articles | ✅ Yes | Variable quality, often SEO-optimized |
 | **新浪财经** | t.cj.sina.com.cn | Financial news | ✅ Yes | Has CAPTCHA on front page but article pages load |
-| **搜狐号** | sohu.com/a/... | Self-media | ⚠️ Sometimes 404 | URLs are transient; fetch immediately |
+| **搜狐号** | sohu.com/a/... | Self-media | ⚠️ Sometimes 404 | URLs are transient; fetch immediately. Login-wall articles: try cached version via `cc.bingj.com/cache.aspx?d=1&s=...` |
 | **知乎专栏** | zhuanlan.zhihu.com/p/... | Long-form analysis | ❌ Blocked | Returns JS shell only; try Google cache |
-| **中华网** | digi.china.com | Tech coverage | ⚠️ Needs redirect follow | JS redirect to mobile URL |
+| **中华网** | digi.china.com | Tech coverage | ⚠️ Needs redirect follow | JS redirect with `uaredirect(\"https://m.tech.china.com/...\")` — curl needs `-L` to follow. Or skip the PC page and directly curl the `m.tech.china.com` mobile URL. |
 | **懂车帝/今日头条** | toutiao.com | Aggregated news | ⚠️ Partial | JS-heavy, try meta extraction |
 | **百家号** | baijiahao.baidu.com | Baidu's self-media | ❌ Blocked | Returns Baidu CAPTCHA |
 | **爱企查** | aiqicha.baidu.com | Company registration | ⚠️ Partial | Basic info accessible, detailed data JS-only |
@@ -205,11 +223,15 @@ When a Chinese O2O platform announces IPO plans, assess these factors:
 ```
 1. DuckDuckGo Lite search (3 min)
    lite.duckduckgo.com/lite/?q=公司名+商业模式+营收+涉黄
+   ⚠ DuckDuckGo Lite works WITHOUT the Clash proxy — use plain curl, no -x flag.
+   It's the most reliable fallback when proxy is slow or Google/Baidu are blocked.
 
 2. Identify working sources from results (2 min)
    - 36kr.com → financial data
    - chinaventure.com.cn → investor perspective
    - 163.com/dy → general overview
+   - digi.china.com → tech compliance stories (⚠ may JS-redirect to mobile URL, 
+     use -L flag or direct curl with `uaredirect` bypass)
 
 3. Fetch and extract 3 best articles in parallel (15 min)
    curl each source, strip JS/CSS, extract key numbers
@@ -222,8 +244,18 @@ When a Chinese O2O platform announces IPO plans, assess these factors:
    - 315曝光: regulatory actions
    - Court cases: labor disputes, civil suits
 
-6. Compile report in Chinese (15 min)
-   Tables for business model, financials, risk assessment
+6. Compile report (15 min)
+   a) Chat: Markdown tables + bullet points — deliver directly in response
+   b) File: Generate Word (.docx) with python-docx for non-technical stakeholders
+   c) NAS delivery: If user requests file saved to Synology NAS, diagnose connectivity first:
+      - Check ports: SSH 22 (usually open), SMB 445/139 (may be disabled)
+      - If only SSH open, install sshpass (`apt-get install -y sshpass`), then SCP
+      - If SMB open, install smbclient and mount
+      - Verify user-provided credentials work before attempting transfer
+
+   python-docx install: uv pip install python-docx
+   Key patterns: add_table(style='Light Shading Accent 1'), color-coded warnings 
+   (RGBColor(0xcc,0,0)), bold section headings, bullet lists, 数据来源 section.
 ```
 
 ## Source Reference
@@ -232,4 +264,6 @@ This reference file was built from researching 东郊到家 (Dongjiao Daojia), a
 - Primary sources: 36氪, 投中网, 新浪财经, 网易号, 中华网
 - Financial data: 鲸准 App, commercial plan (商业计划书)
 - Risk data: 黑猫投诉, 福建广电海博TV 315 investigation
-- See session: 2026-07-08 (东郊到家 deep dive)
+- Compliance detail: 中华网 2025-11-27 report on smart compliance tools
+- Session: 2026-07-08 (东郊到家 deep dive — enhanced compliance tools, 智能工牌/Hardware badge, 品牌代言人 details)
+- See also: `web-research` skill Section: Chinese Software Company Investigation (爱企查/企查查 pattern for social insurance headcount verification)
