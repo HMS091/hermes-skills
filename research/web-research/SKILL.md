@@ -44,7 +44,19 @@ This environment has a Clash proxy (192.168.1.88:7890) that enables search acces
    ```
 
 2. **✅ Google** (via proxy) — works for most queries, returns text-searchable HTML
-3. **❌ Bing** — often returns empty/0-byte
+3. **❌ Bing (via curl)** — returns empty/0-byte when accessed via curl from this environment. **However:**
+   - **Bing China (cn.bing.com) works via Hermes browser** → use `browser_navigate` + `browser_snapshot` for Chinese search results. See `references/chinese-web-search-via-browser.md`.
+   - **Also works via Python `urllib` with mobile User-Agent** → when browser times out or is slow, use terminal with `urllib` + `Mozilla/5.0 (Linux; Android 14)` + Bing CN. This bypasses the desktop anti-bot detection that curl triggers. Example:
+     ```python
+     import urllib.request, urllib.parse
+     headers = {'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36'}
+     query = urllib.parse.quote('搜索关键词')
+     url = f'https://cn.bing.com/search?q={query}&setlang=zh-Hans'
+     req = urllib.request.Request(url, headers=headers)
+     r = urllib.request.urlopen(req, timeout=15)
+     text = r.read().decode('utf-8', errors='replace')
+     # Then extract results via regex on the cleaned HTML
+     ```
 4. **⚠️ price.com.hk** — Cloudflare protected, does NOT work via curl. Use alternative sources for HK pricing.
 5. **ℹ️ Sites with Cloudflare**: Some sites (price.com.hk) have CF protection that blocks curl. Fall back to DuckDuckGo search to find cached/aggregator data.
 
@@ -327,7 +339,7 @@ Common platforms for free Docker deployment:
 - **Prioritize actionable results**: End with a clear "what to do next" recommendation
 
 ## Pitfalls
-- **All search engines blocked scenario**: In this Docker environment, DuckDuckGo, Google, AND Bing can all simultaneously block automated queries (DDG returns CAPTCHA, Google redirects to support page, Bing returns empty). When the full DDG HTML is blocked, **first try DuckDuckGo Lite** (`lite.duckduckgo.com/lite/`) as an intermediate fallback — it uses simpler HTML that's less likely to trigger CAPTCHA. Only if DuckDuckGo Lite also fails should you try **Google News RSS** and **Apple App Store API** (for app/mobile-platform research). If those also fail or don't apply, shift to: (1) **direct domain landing page mining** -- curl the most likely domain name and read server-rendered meta tags + embedded JSON, (2) direct-known-vendor curl scraping, (3) GitHub API for open-source baselines, (4) domain knowledge synthesis. Do NOT keep retrying the same blocked engines — it wastes time.
+- **All search engines blocked scenario**: In this Docker environment, DuckDuckGo, Google, AND Bing can all simultaneously block automated queries (DDG returns CAPTCHA, Google redirects to support page, Bing via curl returns empty). When the full DDG HTML is blocked, **first try DuckDuckGo Lite** (`lite.duckduckgo.com/lite/`) as an intermediate fallback — it uses simpler HTML that's less likely to trigger CAPTCHA. Only if DuckDuckGo Lite also fails should you try **Google News RSS** and **Apple App Store API** (for app/mobile-platform research). If those also fail or don't apply, shift to: (1) **Hermes browser on Bing China** (`browser_navigate("https://cn.bing.com/search?q=...&setlang=zh-Hans")` + `browser_snapshot`) — this works reliably for Chinese search queries where all other approaches fail, (2) **direct domain landing page mining** -- curl the most likely domain name and read server-rendered meta tags + embedded JSON, (3) direct-known-vendor curl scraping, (4) GitHub API for open-source baselines, (5) **delegate_task** for parallel subagent research (each gets independent tools), (6) domain knowledge synthesis. Do NOT keep retrying the same blocked engines — it wastes time. See `references/chinese-web-search-via-browser.md`.
 - **Search engines blocked from Docker**: DuckDuckGo, Google, Bing all anti-bot from container IPs. Always try proxy first, but accept that search may fail and fall back to known-platform knowledge. **DuckDuckGo HTML mode now returns CAPTCHA anomaly pages (~14KB, no result links) for many queries — check for `result__a` class presence to detect blocks.**
 - **Proxy dependency**: The Clash proxy (192.168.1.88:7890) is on an OpenWRT router connected to the NAS. It may be slow or temporarily unreachable. Do NOT permanently remove proxy config — backup before modification
 - **curl vs Python for page fetching**: Use `curl -sL` for initial connectivity checks. For content extraction, pipe from curl to python3. DO NOT use Python `requests`/`urllib` for first attempts — they have different TLS fingerprints and may trigger different blocking
@@ -810,6 +822,7 @@ See `references/business-company-research.md` for full workflow, curl commands f
 
 **References**:
 - `references/chinese-o2o-platform-research.md` — Chinese O2O platform business model analysis: platform-labor relationship (个体户模式), commission structures, financial data triangulation (GMV/valuation cross-source verification), 涉黄 risk assessment, compliance countermeasures, working Chinese news sources (36kr, 投中网, 新浪财经, 网易号), labor classification risk, IPO readiness assessment. Built from 东郊到家 deep-dive.
+- `references/chinese-web-search-via-browser.md` — Chinese web search via Hermes browser accessibility tree: Bing China bypass, direct Chinese site access, parallel delegate_task workflow, real-world example (成都上门按摩 platform research). Use when Scrapling/curl return 0 bytes on Chinese sites.
 - `references/platform-scam-investigation.md` — Systematic approach for investigating potentially fraudulent online platforms: WHOIS recon, red flag checklist (Gmail+Telegram support, anonymous registration, referral codes), grey market vs scam distinction, worked example (feiyangka.com virtual card platform)
 - `references/scraping-docker-deploy-platforms.md` — Multi-site bulk check pattern for free Docker deploy platforms
 - `references/scraping-gpu-price-sources.md` — GPU/electronics real-time price scraping (DCFever HK, Goofish, Taobao, JD)

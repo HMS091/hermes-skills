@@ -61,6 +61,52 @@ B2B sales reality: 100 cold emails → 90 ignored → 8 rejections → 2 willing
 | Real estate | Medium ($100-300/mo) | High volume |
 | Restaurants | Low ($30-80/mo) | Low CLV, skip |
 
+#### 5. ⚠️ CRITICAL: Clarify the Actual Business Model First
+
+**This is the most common analysis error.** User says "platform for X" — always verify what they actually mean:
+
+| What they say | Could mean A | Or mean B |
+|---------------|-------------|-----------|
+| "上门按摩平台" | DTC marketplace (自建平台招技师) | Shop partnership (给店家做数字化+到家转介) |
+| "电商平台" | Build a storefront (自营电商) | SaaS for sellers (帮卖家做店铺系统) |
+| "家政平台" | Hire cleaners directly | Connect users with existing agencies |
+
+**Ask before analyzing:**
+- "Who is your customer? Consumer, shop/business, or corporate HR?"
+- "Do you employ labor directly, or do existing businesses provide it?"
+- "What does the shop/business get out of working with you?"
+- "Revenue: transaction fee, subscription, referral commission, or ad?"
+
+**Real example (July 2026):** User said "上门按摩平台". Analyzed DTC marketplace. User corrected: they wanted to help offline shops with free online booking + home service referral. **Two completely different models** — supply chain, competitors, legal risk profile all change.
+
+#### 6. 🆕 B2B Service Business Evaluation (企业服务模式)
+
+For businesses that sell a SERVICE to other businesses (not compete for end consumers).
+
+**Key differences from B2C platform evaluation:**
+
+| Dimension | B2C Platform | B2B Service |
+|-----------|-------------|-------------|
+| Acquisition | Ad spend, app store, viral | **Direct sales/地推** — build relationships |
+| Decision | Individual impulse | Multi-step: gatekeeper → budget → sign-off |
+| Revenue/customer | ¥30-300/order | **¥3,000-200,000/year** |
+| Churn reason | Found better app | **Budget cut or relationship change** |
+| Contract | None (one-off) | **Monthly/quarterly/annual** |
+| Legal risk (PRC) | 涉黄/劳动法穿透 (high) | **Low** — B2B, on client premises, supervised |
+| Startup cost | ¥300,000+ (app + ops) | **¥20,000-50,000** (service first, tech later) |
+
+**When evaluating a B2B service, ask:**
+- [ ] Who is the decision maker? (HR? Admin? Union? CEO?)
+- [ ] Sales cycle length? (1 week SMB, 3-6 months 国企)
+- [ ] Contract size? (¥10K/yr vs ¥200K/yr)
+- [ ] Can you start without tech? (微信 + Excel may be enough)
+- [ ] **国企 vs 民企 decision:**
+  - **民企/外企** → fast decision (1-2 weeks), fast payment (15-30 days), lower contract value (¥10-50K/yr). Start here.
+  - **国企/央企** → slow cycle (3-6 months), tender required, slow payment (60-120 days), **high renewal rate**, higher value (¥50-200K/yr). Graduate to these.
+  - Key contact at 国企: **工会主席** (union head) controls employee welfare budget
+
+**Reference case study:** See `references/b2b-corporate-massage-analysis.md` — full analysis of B2B office massage service in Chengdu, including pricing models, channel strategy, competitive landscape, and 国企/央企 vs 民企 comparison.
+
 ### Evaluation Checklist
 
 - [ ] List at least 5 competitors. If you can't, search harder.
@@ -258,3 +304,4 @@ When the user corrects you about data accuracy, immediately:
 - `references/financial-influencer-due-diligence.md` — Framework for evaluating stock influencers (Serenity case study)
 - `references/ai-chokepoint-stock-screening.md` — Full AI supply chain stock screening results + API reference
 - `references/plab-ceg-deep-dive-example.md` — Worked example of company deep-dive (PLAB: photomasks duopoly, CEG: AI nuclear power)
+- `references/b2b-corporate-massage-analysis.md` — B2B corporate office massage market analysis: business model, pricing, 国企 vs 民企 channel strategy, Chengdu market data, startup requirements

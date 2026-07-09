@@ -34,6 +34,30 @@ Only use Hermes browser (navigate/click/snapshot/vision) for:
 
 Otherwise: Scrapling is faster, cheaper, and more reliable.
 
+### ⚠️ EXCEPTION: Chinese websites (百度/36kr/知乎/163等) and Chinese search engines
+
+Scrapling's `Fetcher.get()` **often returns 0 bytes** for Chinese websites due to aggressive anti-bot detection (anti-crawler, WAF, IP blocking). The same happens with plain `curl` and `urllib`. This is NOT a scrapling bug — Chinese sites run some of the most aggressive bot detection globally.
+
+**When Scrapling Fetcher returns 0 bytes on a Chinese site:**
+1. ❌ Do NOT debug Scrapling config (timeouts, headers, proxy) — the site is actively blocking you
+2. ✅ **Immediately switch to Hermes browser** (browser_navigate + browser_snapshot) — the browser's accessibility tree bypasses most Chinese anti-bot systems
+3. ✅ **Also try `delegate_task`** in parallel — the subagent's terminal session may have different network routing or can dedicate its own tools
+
+**Confirmed working for Chinese search via browser:**
+- `https://cn.bing.com/search?q=<query>&setlang=zh-Hans` — Bing China works well through browser snapshot. The accessibility tree renders search result titles, URLs, and descriptions as structured elements.
+- Browser snapshot reveals Chinese search results as headings + links + paragraph descriptions, easily readable.
+
+**Confirmed NOT working via Scrapling/curl (0 bytes):**
+- Baidu search
+- 36kr articles (SPA, JS-required)
+- Zhihu pages
+- 163.com articles
+
+**Confirmed working via Scrapling Fetcher (non-Chinese):**
+- Bing国际版 (www.bing.com, English)
+- Google News RSS
+- Most non-Chinese sites
+
 ### Data extraction via browser_console
 
 When `browser_snapshot` is truncated (>8000 chars) or doesn't show the content you need, use `browser_console` with JS expressions:
