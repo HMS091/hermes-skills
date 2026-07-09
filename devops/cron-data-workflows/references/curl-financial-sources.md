@@ -1,6 +1,6 @@
 # Curl-Friendly Financial News Sources (Cron / Blocked Environments)
 
-**Last updated:** 2026-07-03 (added Google News RSS — best per-ticker source for cron; demoted CSS-heavy HTML extraction to fallback)
+**Last updated:** 2026-07-09 (added CNBC RSS Investing/Economy/Politics feed IDs, MarketWatch alt/realtime RSS endpoints)
 
 ## Why This Matters
 
@@ -16,6 +16,8 @@ In cron jobs, tools like `web_search`, `execute_code`, and piped `curl | python3
 | **Gold API** | `gold-api.com` | ★★★★☆ | JSON endpoint, no key needed for XAU spot. Returns `{price, timestamp}`. Beware: occasionally reports wrong instrument (see gold-price-sources.md). |
 | **Investing.com RSS** | `investing.com/rss/news_{FEED_ID}.rss` | ★★★☆☆ | **RSS subdomain works with curl** even though the main site (`www.investing.com`) requires JS/Cloudflare. Use `/rss/news_14.rss` for Economy, `/rss/news_301.rss` for Crypto. Good for supplemental Fed/economy news. Slower updates than CNBC. |
 | **MarketWatch RSS** | `feeds.content.dowjones.io/public/rss/mw_topstories` | ★★★★☆ | Top stories from MarketWatch via Dow Jones RSS. Clean XML, no Cloudflare. Runs about 10-15 headlines covering broad market, consumer, politics. No ticker-specific feeds. |
+| **MarketWatch RSS (alt)** | `feeds.marketwatch.com/marketwatch/topstories/` | ★★★★☆ | Alternative MarketWatch RSS endpoint. Same content, different CDN. Use as fallback if dowjones.io is unreachable. |
+| **MarketWatch (realtime)** | `feeds.marketwatch.com/marketwatch/realtimeheadlines/` | ★★★☆☆ | Real-time headlines feed from MarketWatch. Faster updates but fewer articles per fetch (~5-8 headlines). Good for time-sensitive breaking news (Fed decisions, earnings releases, geopolitical flashpoints). Use alongside the main topstories feed for comprehensive coverage. |
 | **MarketWatch (stock pages)** | `marketwatch.com/investing/stock/{TICKER}` | ★★★★☆ | **Stock-specific pages** (`/investing/stock/nvda`, `/investing/stock/tsla`) serve raw HTML with news headlines. No Cloudflare on these subpages. Article titles are in `<a>` tags nested inside `class=article__content` divs. **Main site** (`/`) may still have Cloudflare &#8212; use stock-specific URLs. Good for ticker-specific headlines + general market news sidebar. |
 
 
@@ -28,6 +30,9 @@ CNBC serves category-specific RSS feeds at `cnbc.com/id/{FEED_ID}/device/rss/rss
 |---------|----------|----------|
 | `100003114` | **US Top News and Analysis** | General market overview, macro, policy, politics. Best single feed for broad briefing context. |
 | `19854910` | **Tech** | AI/ML, semiconductors, big tech (NVDA, AAPL, MSFT), cybersecurity, startups. Essential for NVDA analysis. |
+| `15839069` | **Investing** | Stock-specific news, analyst calls, market strategy, trading ideas. Great for TSLA/NVDA specific headlines. |
+| `20910258` | **Economy** | Fed policy, jobs data (nonfarm payrolls), inflation, GDP, trade data, central banks. Essential for macro and gold analysis. |
+| `10000113` | **Politics** | Geopolitics, trade wars, Iran/Middle East, NATO, tariffs, sanctions, White House/Congress. Critical for gold/macro and risk assessment. |
 | `10000115` | **Real Estate** | Housing market, mortgage rates, rate sensitivity indicators |
 | `15837362` | **US News** | Broader US news, politics, economic policy |
 | `10000664` | **Finance** | Banking, Fed, rates, hedge funds, private equity, bond markets |
