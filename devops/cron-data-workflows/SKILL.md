@@ -266,19 +266,65 @@ Cron jobs run with a restricted toolset. The `web_search` tool is **not availabl
 
 **Better alternative: Google News RSS feeds for per-ticker research.** Instead of subagents, use curl to Google News RSS with ticker-specific search queries. Each ticker gets its own curl (NVDA, TSLA, gold — all runnable in parallel as separate terminal() calls), and the XML output is trivial to parse with `grep -oP`. For broad market context or when Google News RSS doesn't give enough depth, fall back to CNBC RSS or MarketWatch stock pages. See `references/curl-financial-sources.md` for the full feed catalog and extraction patterns.
 
+### Network Connectivity Check (Run Before Any Curl)
+
+Not all cron environments have internet access. Before attempting multiple curls or browser navigations, **probe connectivity first** to avoid wasting time and tool calls:
+
+```bash
+# Quick connectivity check (runs in <5s total)
+curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 https://www.google.com 2>&1
+# → "200" = internet available; "000" = FULL network isolation, skip all external fetches
+```
+
+**When response is `000` (total network isolation):**
+- Skip ALL curl-based and browser-based fetches immediately
+- Do NOT attempt Google News RSS, CNBC, Nasdaq API, Yahoo, or any external URL
+- Every external call will time out (typically 15-60s each), wasting tool calls and wall-clock time
+- Proceed directly to the **Total Air Gap Fallback** pattern below
+
+**When response is `200`:**
+- Proceed with the normal news gathering priority below
+
+### Total Air Gap Fallback (Zero External Network)
+
+When the connectivity probe returns `000` — no internet access at all — the only data available is local files:
+
+| Available | Not Available |
+|-----------|---------------|
+| Current run's `{script_output}` JSON | All curl/browser/web sources |
+| Previous days' `_raw.json` files | All API endpoints |
+| Previous days' `_briefing.md` files | All RSS feeds |
+| HTML dashboard with historical briefings | All news searches |
+
+**Workflow:**
+1. **Read the previous 2-3 `_raw.json` files** to compare day-over-day prices, changes, and volumes
+2. **Read the previous day's `_briefing.md`** for analyst context, risk warnings, and macro narrative
+3. **Derive multi-day trends** from the price sequence (see `references/multi-day-trend-analysis.md`)
+4. **Carry forward relevant context** from the previous briefing's "今日热点" and "宏观环境" sections — geopolitics (Iran, Fed, tariffs) and structural themes (AI spend, price wars) don't change daily
+5. **Update risk assessments** from previous briefing against current prices (e.g., "$200 support tested and held" or "$400 support broken")
+6. **The "热点" section becomes analysis-led**: frame headlines as "NVDA反弹+3.9%, $200底部确认" (price-action-based) rather than news-driven, since no external news is available
+
+**Example: Converting zero-news day into a meaningful briefing:**
+```markdown
+### 🖥️ 英伟达 (NVDA $210.49 ▼0.22%)
+1. **NVDA放量反弹+3.92%，$200成为阶段底部确认** — 对比昨日$202.56收盘，单日大涨$7.93，成交量放大至1.48亿股。$200整数关口反复测试后被放量拉起，转为有效支撑。尽管日内微跌-0.22%，但整体多头格局已形成。
+```
+
+**Golden rule:** Price action + trend comparison + carried-forward macro context produces a credible briefing. Do NOT fabricate news headlines — if no news is available, write "无新增重大消息" rather than guessing.
+
 ### News Gathering Priority for Cron Briefings
 
 When producing daily briefings in a cron environment, gather news in this priority order:
 
-1. **`market_news` from pre-run JSON** — already collected by the data-collection script, no restrictions
+1. **`market_news` from pre-run JSON** — already collected by the data-collection script, no restrictions (fastest, zero network cost)
 2. **Google News RSS feeds** (`news.google.com/rss/search?q=...`) — **#1 for per-ticker news.** Supports arbitrary search queries (NVDA/TSLA/gold), clean XML output, no Cloudflare. Run one curl per ticker in parallel. See `references/curl-financial-sources.md` for the full extraction pattern.
 3. **CNBC RSS feeds** (curl-friendly, no Cloudflare) — best for US financial news across multiple categories
-5. **CNN Lite** (`lite.cnn.com`) — best for geopolitics context. Renders clean accessibility trees without bot detection. Use `browser_navigate` to get all major geopolitical headlines (Iran, Middle East, NATO, trade wars) that directly impact gold and macro sections.
-6. **Investing.com RSS feeds** — good for Fed/economy and crypto news
-5. **MarketWatch RSS** — broad market overview, consumer, politics
-6. **MarketWatch stock pages** — ticker-specific news + price data sidebar
-7. **Browser** — last resort for price data when APIs fail; expensive but reliable
-8. **Synthesis from known context + technical analysis** — education, not invention
+4. **CNN Lite** (`lite.cnn.com`) — best for geopolitics context. Renders clean accessibility trees without bot detection. Use `browser_navigate` to get all major geopolitical headlines (Iran, Middle East, NATO, trade wars) that directly impact gold and macro sections.
+5. **Investing.com RSS feeds** — good for Fed/economy and crypto news
+6. **MarketWatch RSS** — broad market overview, consumer, politics
+7. **MarketWatch stock pages** — ticker-specific news + price data sidebar
+8. **Browser** — last resort for price data when APIs fail; expensive but reliable
+9. **Multi-day trend analysis + previous briefing context** — fallback when ALL external sources fail (see **Total Air Gap Fallback** above)
 
 ### Cron Mode Security Restrictions
 
@@ -497,6 +543,7 @@ Save it at `/opt/data/briefings/{date}_raw.json` **before** running `generate_br
 
 ## Common Pitfalls
 
+- **Total network isolation (curl returns `000`)**: Some cron environments have zero internet access. All curls (Google News RSS, CNBC, Nasdaq API) and browser calls will time out. Always probe with `curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 https://www.google.com` first. If it returns `000`, skip ALL external fetches and go straight to the **Total Air Gap Fallback** pattern (multi-day trend analysis + previous briefing context carryover).
 - **Yahoo Finance consent wall blocks price extraction**: Yahoo redirects datacenter IPs to `consent.yahoo.com/v2/collectConsent` — the page shows only a privacy dialog, no prices. Check the snapshot title for "Ihre Datenschutzeinstellungen" or "consent.yahoo.com" in the URL. **Do not retry Yahoo** — switch to Reuters stock pages (`reuters.com/markets/companies/{TICKER}.OQ/`) which work without consent walls.
 - **Browser timeout after multiple navigations in one session**: When making 3+ sequential `browser_navigate` calls in a cron job, later calls may timeout at 60s. If you need data from multiple pages, **batch curls for APIs** (Nasdaq API, Yahoo Chart API) for price data and use the browser only for the primary page. Alternative: navigate back with `browser_back()` to avoid new session overhead, or prioritize one comprehensive source (Reuters Markets page) that shows multiple tickers' context at once.
 - **Script referenced but never created**: The cron job may have been configured with `"script": "collect.py"` but the file was never written. This causes silent "Script not found" errors every run.

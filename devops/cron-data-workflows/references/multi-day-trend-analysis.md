@@ -94,6 +94,49 @@ Use the multi-day context to write stronger opening statements:
 | Holiday-shortened week | Helps bridge the gap in data frequency |
 | After volatility event | Shows whether the move is continuing or reversing |
 | When script data looks wrong | Historical comparison helps spot price anomalies |
+| **Total network isolation (all external fetches fail)** | **Only fallback** — no news, no API, no browser. Trend + previous briefing carryover is the entire analysis |
+
+## Total Air Gap: Carrying Forward Context From Previous Briefing
+
+When ALL external data sources are unreachable (connectivity check returns `000`), the previous day's `_briefing.md` becomes the primary source for qualitative context:
+
+### What to Carry Forward
+
+| Previous Briefing Section | How to Reuse |
+|---|---|
+| **宏观环境** (Macro) | Geopolitics (Iran, Middle East), Fed policy, interest rates — these don't change daily. Rephrase with current price context |
+| **风险提示** (Risk warnings) | Check each risk against current prices. Did the risk materialize? Update severity. Carry forward unresolved ones |
+| **黄金/中东地缘** | Geopolitical tensions persist. Update to: "中东局势未出现缓和迹象" or "局势边际缓和" |
+| **美联储/降息** | Rate expectations evolve slowly. Carry forward with minor updates based on new economic data expectations |
+| **NVDA/TSLA structural themes** | AI capex trajectory, EV price wars, FSD competition — these are multi-month narratives, not day-to-day news |
+
+### What NOT to Carry Forward
+
+- **Specific price predictions** ("NVDA will test $200") — these must be re-evaluated against current actual prices
+- **Yesterday's "热点" headlines** — unless they're still the dominant narrative (e.g., ongoing military conflict)
+- **Technical analysis levels** — re-calculate support/resistance from the current price and multi-day trend vectors
+
+### Writing the "热点" Section Without News
+
+When there's literally no news (empty `market_news`, no curl access, empty RSS), frame the "热点" section around **price action themes** rather than news headlines:
+
+| ❌ Bad (invents news) | ✅ Good (data-driven) |
+|---|---|
+| `媒体报道英伟达AI芯片需求旺盛...` | `NVDA放量反弹+3.92%，从$202.56拉升至$210.49，$200底部确认` |
+| `市场对特斯拉交付量预期向好...` | `TSLA连续三日站稳$400上方，$400从阻力转为支撑` |
+| `地缘冲突推动黄金避险需求...` | `黄金高位整固$4,120附近，$4,100支撑连续三个交易日有效` |
+
+### Complete Air Gap Workflow
+
+1. Read current `_raw.json` → extract prices, changes, volumes
+2. Read previous 2 `_raw.json` files → compute trend vectors
+3. Read previous `_briefing.md` → extract macro context + risk warnings
+4. Combine: trend + macro carryover + updated risk assessment
+5. Write "热点" as price-action-driven analysis (no fabricated news headlines)
+6. Update "宏观环境" by carrying forward persistent themes with current price context
+7. Generate HTML dashboard
+
+This produces a credible, data-consistent briefing even in zero-external-data conditions.
 
 ## Limitations
 
