@@ -998,11 +998,102 @@ for line in text.split('.'):
 
 ---
 
-## Special Application: Financial Market Research (Commodities, Forex, Macro)
+## Special Application: Financial Market Research (Commodities, Forex, Macro, Equity)
+
+When the user asks to research financial markets — commodities (gold, oil), forex (XAU/USD, DXY), individual stocks/equities, or macro-economic factors (Fed policy, geopolitics, central bank actions). Supplements the general scraping approach with financial-specific data sources.
+
+### Individual Stock / Equity Research (股票调研)
+
+Pattern for researching a **publicly traded company's stock** — recent news, analyst ratings, competitor moves, product announcements, and earnings coverage.
+
+#### Primary Data Sources (work from restricted environments with no browser)
+
+When the browser times out and financial sites (Yahoo Finance, Investing.com) block direct curl access, use these RSS/API feeds:
+
+| Source | URL Pattern | Data | Auth |
+|--------|-------------|------|------|
+| **Seeking Alpha RSS** | `https://seekingalpha.com/api/sa/combined/{TICKER}.xml` | 30 most recent news items with headlines, dates, links. Covers analyst upgrades/downgrades, earnings, product news, competitor coverage. | None (RSS, no auth) |
+| **CNBC Technology / Semicon RSS** | `https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id={CATEGORY_ID}` | Industry-level news (chip sector, AI, etc.) | None |
+| **Trading Economics** | `https://zh.tradingeconomics.com/{TICKER}:us` (NVDA→nvda:us) | Stock price, daily change, YTD performance, analyst forecasts | None |
+| **East Money (东方财富)** | `https://quote.eastmoney.com/us/{TICKER}.html` | Chinese-language stock quote page (JS-heavy, data partially server-rendered) | None |
+
+**Seeking Alpha RSS category IDs for CNBC:**
+- `19854910` = Technology
+- `100006642` = (semiconductor — may not work)
+- `100003114` = US Markets
+
+#### Workflow
+
+1. **Fire parallel RSS queries** for the target stock AND its key competitors:
+   ```python
+   import urllib.request, xml.etree.ElementTree as ET, ssl, html
+   ctx = ssl.create_default_context()
+   
+   tickers = ['NVDA', 'AMD', 'INTC']  # target + competitors
+   for ticker in tickers:
+       req = urllib.request.Request(
+           f'https://seekingalpha.com/api/sa/combined/{ticker}.xml',
+           headers={'User-Agent': 'Mozilla/5.0'}
+       )
+       resp = urllib.request.urlopen(req, timeout=15, context=ctx)
+       data = resp.read().decode('utf-8')
+       root = ET.fromstring(data)
+       for item in root.iter('item'):
+           title = item.find('title')
+           pubdate = item.find('pubDate')
+           if title is not None and title.text:
+               t = html.unescape(title.text)
+               # Filter recent / relevant items
+               print(f'[{ticker}] {t[:120]} | {pubdate.text if pubdate is not None else ""}')
+   ```
+
+2. **Also query industry-level CNBC RSS** for broader chip/semiconductor context:
+   ```python
+   req = urllib.request.Request(
+       'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910',
+       headers={'User-Agent': 'Mozilla/5.0'}
+   )
+   ```
+
+3. **Extract stock price data** from Trading Economics (garbled text from stripped HTML — look for price, change %, PE, market cap):
+   ```python
+   import re
+   # After stripping HTML tags, search for number patterns
+   prices = re.findall(r'价格\s*([0-9.]+)', text)
+   changes = re.findall(r'变化\s*([0-9.]+)', text)
+   pct = re.findall(r'([0-9.]+%)', text)
+   ```
+
+4. **Get Chinese-language sources** (when user asks for Chinese context):
+   - Use `browser_navigate` to `https://quote.eastmoney.com/us/{TICKER}.html` if browser is available
+   - Otherwise, the Bing search snippet from `cn.bing.com` may show East Money links
+
+5. **Synthesize findings** into structured sections:
+   - **Stock price & market data** (price, daily/monthly/YTD change, PE, market cap)
+   - **New products & technology** (announcements, launches, delays)
+   - **Analyst ratings** (upgrades, downgrades, price targets with firm names)
+   - **Competitor moves** (AMD, Intel, or other key competitors' activities)
+   - **Market sentiment** (bull/bear debates, key risks, catalysts)
+
+#### Pitfalls
+- **Seeking Alpha blocks direct article access** (HTTP 403) — only headline/date metadata is available from the RSS feed. Full article text cannot be fetched without a subscription.
+- **Trading Economics HTML is garbled** after StripTags — extract numbers via regex rather than trying to parse structure.
+- **East Money (东方财富) requires JS** for full stock data — the initial curl response is mostly empty shell. Use browser if available or accept limited data.
+- **Yahoo Finance blocks mainland China IPs** — redirected to a "service unavailable" page. Cannot be used from Chinese-based environments.
+- **Google News RSS** may time out from restricted networks — Seeking Alpha and CNBC RSS are more reliable alternatives.
+- **Bing search results** (cn.bing.com) can provide some stock price snippets in search results (seen: NVDA $210.96, +4.03%), but the content is JS-injected and not consistently extractable.
+- **Historical context via RSS**: Seeking Alpha feed only returns ~30 most recent items — no deep archives. Use Google News search for older news.
+- **Date range**: RSS feeds don't filter by date — you must filter client-side by parsing `pubDate` fields.
+
+#### Reference File
+
+See `references/equity-research-sources.md` for full RSS endpoint list, CNBC category IDs, and worked examples.
+
+### Commodities, Forex, Macro Research
 
 When the user asks to research financial markets — commodities (gold, oil), forex (XAU/USD, DXY), or macro-economic factors (Fed policy, geopolitics, central bank actions). Supplements the general scraping approach with financial-specific data sources.
 
-### Workflow
+#### Workflow
 
 1. **Get current price from free API** (no auth, no browser):
    ```bash

@@ -49,6 +49,18 @@
 
 ---
 
+*免责声明：本简报仅供参考，不构成投资建议。投资有风险，入市需谨慎。*
+
+### Zero-News Briefing Pattern (When All External Sources Blocked)
+
+Use when ALL web news sources return 0 bytes — Google News RSS, Yahoo, CNBC, Reuters, etc. all fail silently despite internet connectivity.
+
+1. **分析导向代替消息驱动** — Frame "今日热点" as price-action analysis: `NVDA放量反弹+4%, $200支撑确认` instead of fabricating headlines
+2. **成交量是核心信号** — With no news, volume is the most informative data point. 148M shares (NVDA) vs 33M (TSLA) signals very different capital flows
+3. **百分比差异揭示资金流向** — Compare % changes (NVDA +4% vs TSLA +0.3%) to infer sector rotation even without news
+4. **前日简报内容延续** — Pre-baked macro factors (Fed policy, geopolitics, AI capex cycle) change slowly — carry forward from previous briefing
+5. **明确标注数据受限** — State clearly that web news was unavailable. Never fabricate headlines. "无新增重大消息" is honest and professional.
+
 ### Writing Guidelines
 
 - **全中文、简洁务实** — no English filler, direct to the point
