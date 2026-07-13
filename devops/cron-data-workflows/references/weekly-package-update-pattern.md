@@ -77,6 +77,8 @@ Before the script runs, check:
 
 - **`hermes` not in PATH:** Use full path: `/opt/hermes/.venv/bin/hermes`
 - **`pip index versions` not available:** Requires pip >= 23.1. Fallback: `pip install --dry-run` (slower)
+- **`pip` may not be installed at all (PEP 668):** The system Python may be PEP 668 protected, meaning `pip` is not available at the system level. `pip show PKG` and `pip index versions PKG` silently return empty output with exit code 0 — they don't error, they just produce nothing. **Fix**: Check `pip` availability with `which pip || command -v pip` before using it. In Hermes environments, use `uv pip show PKG` from the project directory (e.g., `cd /opt/hermes && uv pip show PKG 2>/dev/null | grep "^Version:" | awk '{print $2}'`) or `uv tool list` for tool-level packages. See the `cron-data-workflows` SKILL.md pitfall section for more details.
+- **`hermes skills check` grep may false-positive on Unicode borders:** The table output uses box-drawing characters (`┏`, `┃`, `┗`, `━`, `┓`) that can match loose grep patterns like `"update\|outdated\|new version"`. **Fix**: either parse `hermes skills check --json` output, run `hermes skills update` unconditionally (idempotent), or use more specific matching with `grep -c "up_to_date\|outdated"`.
 - **Dry-run timeout:** `pip install --upgrade --dry-run` can take >60s on slow proxy networks. Default to `pip index versions` which is 3-5× faster.
 
 ## Files Created in this Session
