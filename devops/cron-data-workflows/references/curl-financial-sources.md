@@ -13,7 +13,8 @@ In cron jobs, tools like `web_search`, `execute_code`, and piped `curl | python3
 | **Google News RSS** | `news.google.com/rss/search?q=...` | ★★★★★ | **Best per-ticker source for cron.** Supports arbitrary search queries (NVDA, TSLA, gold, Fed). Clean XML, no Cloudflare, no JS. Parallel curl per ticker. See full section below. |
 | **CNBC RSS Feeds** | `cnbc.com/id/{FEED_ID}/device/rss/rss.html` | ★★★★★ | **Best source for US financial news via curl.** Multiple category feeds serve clean RSS/XML with no Cloudflare. See CNBC RSS Feed Catalog below for feed IDs. |
 | **Economic Times India** | `economictimes.indiatimes.com/markets/stocks/news` | ★★★☆☆ | Serves raw HTML without JS. Good for global market overview, analyst calls, AI/semiconductor news. Content is India-centric but covers US markets. No Cloudflare. |
-| **Kitco Gold Page** | `kitco.com/gold-price-today-usa/` | ★★★★★ | **Best gold price source for curl.** Embeds structured JSON in `<script id="__NEXT_DATA__">`. No Cloudflare, no JS. Returns ask/bid/mid/change/high/low/timestamp. Verified working in environments where EVERY other financial site was blocked. (See gold-price-sources.md for extraction pattern.) |
+| **Hacker News Algolia API** | `hn.algolia.com/api/v1/search?query=...` | ★★★★☆ | **Best tech-company sentiment supplement.** Returns JSON article titles/URLs/points/comments. HN audience is tech-heavy - excellent for NVDA, TSLA, AI, and gold sentiment. No Cloudflare, generous rate limits (10k req/hr). Covers tech themes Google News RSS may miss. Best as supplement to professional news feeds. See full section below. |
+| **Kitco Gold Page** | `kitco.com/gold-price-today-usa/` | ★★★★★ | **Best gold price source for curl.** Embeds structured JSON in <script id=__NEXT_DATA__>. No Cloudflare, no JS. Returns ask/bid/mid/change/high/low/timestamp. Verified working in environments where EVERY other financial site was blocked. (See gold-price-sources.md for extraction pattern.) |
 | **Investing.com RSS** | `investing.com/rss/news_{FEED_ID}.rss` | ★★★☆☆ | **RSS subdomain works with curl** even though the main site (`www.investing.com`) requires JS/Cloudflare. Use `/rss/news_14.rss` for Economy, `/rss/news_301.rss` for Crypto. Good for supplemental Fed/economy news. Slower updates than CNBC. |
 | **MarketWatch RSS** | `feeds.content.dowjones.io/public/rss/mw_topstories` | ★★★★☆ | Top stories from MarketWatch via Dow Jones RSS. Clean XML, no Cloudflare. Runs about 10-15 headlines covering broad market, consumer, politics. No ticker-specific feeds. |
 | **MarketWatch RSS (alt)** | `feeds.marketwatch.com/marketwatch/topstories/` | ★★★★☆ | Alternative MarketWatch RSS endpoint. Same content, different CDN. Use as fallback if dowjones.io is unreachable. |
@@ -200,6 +201,67 @@ cat /tmp/gn_nvda.html | tr '>' '\n' | grep -A1 'DY5T1d' | head -20
 ```
 
 **Gold-specific:** `news.google.com/rss/search?q=gold+price+XAU+2026&hl=en-US&gl=US&ceid=US:en`
+
+## ✅ Hacker News Algolia API (Tech Company News Supplement)
+
+**Hacker News Algolia API (`hn.algolia.com/api/v1/search`) is a unique curl-friendly source for tech-company news and market sentiment.** HN's audience is heavily tech/startup/VC — articles about NVDA, TSLA, AI, and crypto tend to appear here before traditional financial news outlets cover them. The API returns structured JSON with article titles, URLs, points (upvotes), comment counts, and publication dates.
+
+**Why it matters for daily briefings:** In some cron environments, Google News RSS and CNBC RSS may be selectively blocked (returning 0 bytes), and MarketWatch may not have enough ticker-specific headlines. HN Algolia reliably returns 10+ relevant headlines per query for NVDA and TSLA, and gold headlines when queried broadly. The titles often include opinion/sentiment signals not found in straight news feeds.
+
+**Limitations:** The content is user-submitted — titles can be clickbaity, opinion-heavy, or speculative. Not a replacement for professional financial news (CNBC, Reuters), but a good supplement for sentiment and breaking tech stories.
+
+**Extraction pattern (two-step, cron-safe):**
+
+```bash
+# Step 1: Download to temp file (no pipe to python3)
+curl -sL --max-time 20 \
+  "https://hn.algolia.com/api/v1/search?query=NVIDIA+NVDA+stock&tags=story&hitsPerPage=5" \
+  -o /tmp/hn_nvda.json
+
+# Step 2: Parse with python3 reading from saved file
+python3 -c "
+import json
+with open('/tmp/hn_nvda.json') as f:
+    d = json.load(f)
+for h in d.get('hits', []):
+    print(h['title'])
+"
+```
+
+**Query parameters:**
+
+| Parameter | Example | Purpose |
+|-----------|---------|---------|
+| `query` | `NVIDIA+NVDA+stock` | Search query (separate terms with `+`) |
+| `tags` | `story` | `story` = main posts; `comment` = discussion replies |
+| `hitsPerPage` | `5` | Results per page (max 50) |
+| `numericFilters` | `created_at_i>1800000000` | Unix timestamp range (for recent stories) |
+
+**Per-ticker queries (run in parallel):**
+
+```bash
+# NVDA
+curl -sL --max-time 20 \
+  "https://hn.algolia.com/api/v1/search?query=NVIDIA+NVDA+AI+chip+stock&tags=story&hitsPerPage=5" \
+  -o /tmp/hn_nvda.json
+
+# TSLA
+curl -sL --max-time 20 \
+  "https://hn.algolia.com/api/v1/search?query=Tesla+TSLA+Elon+delivery&tags=story&hitsPerPage=5" \
+  -o /tmp/hn_tsla.json
+
+# Gold / Macro
+curl -sL --max-time 20 \
+  "https://hn.algolia.com/api/v1/search?query=gold+price+inflation+Fed&tags=story&hitsPerPage=5" \
+  -o /tmp/hn_gold.json
+```
+
+**When to use as primary:** If the connectivity check passes (google.com returns 200) but Google News RSS, CNBC RSS, and MarketWatch RSS all return 0 bytes — a pattern observed in geolocation-blocked cron environments — HN Algolia is often the only external source that still works.
+
+**Caveats:**
+- The Algolia index lags by 1-2 minutes behind real-time HN posts — fine for daily briefings, not for intraday
+- Some search queries return empty results; try broader terms (e.g., `Tesla+Elon` instead of `TSLA+Q2+deliveries`)
+- The `numericFilters` timestamp filter can return empty on JSON DecodeError if the file is actually an HTML error page instead of JSON — always check file size before parsing
 
 ## ⚠️ Important: Yahoo Finance Requires `--compressed` Flag
 

@@ -159,6 +159,16 @@ When data comes from the **last trading day before a weekend** but the briefing 
 
 4. **Gold section should lead with geopolitics** on Monday briefings — weekend geopolitical developments directly impact gold's Monday open and can override prior Friday's technical setup.
 
+#### Extended Gap Pattern (Thursday close → Sunday briefing)
+
+When stock data shows **Thursday's close** but the briefing is generated on **Sunday** (or later), the staleness is more severe than a standard weekend bridge:
+
+- **Check the data source timestamp** in the JSON. NASDAQ timestamps showing "Jul 9" on a "Jul 13" collection date = Thursday close data on Sunday. Note this explicitly in the disclaimer.
+- **Gold may still update** even when stocks are stale — gold APIs like gold-api.com return live prices 24/7. If gold shows a new price while stocks show old data, note the divergence: "黄金数据为实时更新，NVDA/TSLA为周四收盘价。"
+- **Compare against yesterday's briefing** before writing — if NVDA and TSLA prices are identical to yesterday's briefing, the data source hasn't refreshed. Don't re-analyze the same prices without acknowledging the staleness.
+- **Geopolitical framing is more important** than price-action framing for the stale assets. With 3 days of gap, the old price movement is less relevant than the news that has accumulated since.
+- **Weekend-only events may dominate** — e.g., US-Iran conflict escalation, Sunday oil market movement. Lead with these macro themes rather than rehashing last week's price action.
+
 ## Build Patterns
 
 ### Software Self-Update Pattern (Auto-Upgrade CLI Tools via Cron)
@@ -319,12 +329,13 @@ When producing daily briefings in a cron environment, gather news in this priori
 1. **`market_news` from pre-run JSON** — already collected by the data-collection script, no restrictions (fastest, zero network cost)
 2. **Google News RSS feeds** (`news.google.com/rss/search?q=...`) — **#1 for per-ticker news.** Supports arbitrary search queries (NVDA/TSLA/gold), clean XML output, no Cloudflare. Run one curl per ticker in parallel. See `references/curl-financial-sources.md` for the full extraction pattern.
 3. **CNBC RSS feeds** (curl-friendly, no Cloudflare) — best for US financial news across multiple categories
-4. **CNN Lite** (`lite.cnn.com`) — best for geopolitics context. Renders clean accessibility trees without bot detection. Use `browser_navigate` to get all major geopolitical headlines (Iran, Middle East, NATO, trade wars) that directly impact gold and macro sections.
-5. **Investing.com RSS feeds** — good for Fed/economy and crypto news
-6. **MarketWatch RSS** — broad market overview, consumer, politics
-7. **MarketWatch stock pages** — ticker-specific news + price data sidebar
-8. **Browser** — last resort for price data when APIs fail; expensive but reliable
-9. **Multi-day trend analysis + previous briefing context** — fallback when ALL external sources fail (see **Total Air Gap Fallback** above)
+4. **Hacker News Algolia API** (`hn.algolia.com/api/v1/search?query=...`) — **best fallback when Google News RSS and CNBC return 0 bytes (geolocation block).** Uniquely good for NVDA/TSLA tech sentiment and AI news. Returns JSON, no Cloudflare, generous rate limits. See `references/curl-financial-sources.md` for extraction pattern.
+5. **CNN Lite** (`lite.cnn.com`) — best for geopolitics context. Renders clean accessibility trees without bot detection. Use `browser_navigate` to get all major geopolitical headlines (Iran, Middle East, NATO, trade wars) that directly impact gold and macro sections.
+6. **Investing.com RSS feeds** — good for Fed/economy and crypto news
+7. **MarketWatch RSS** — broad market overview, consumer, politics
+8. **MarketWatch stock pages** — ticker-specific news + price data sidebar
+9. **Browser** — last resort for price data when APIs fail; expensive but reliable
+10. **Multi-day trend analysis + previous briefing context** — fallback when ALL external sources fail (see **Total Air Gap Fallback** above)
 
 ### Cron Mode Security Restrictions
 
