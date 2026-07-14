@@ -283,6 +283,90 @@ Present comparison table: chokepoint strength, market cap, % from 52wk high, ins
 - DexScreener: small-cap token prices
 - Proxy: `HTTP_PROXY=http://192.168.1.88:7890` if APIs time out
 
+---
+
+## Part 3: Viral AI Monetization Claim Verification
+
+### Trigger
+
+User asks to verify a viral story/claim about someone making large money quickly with AI tools (OnlyFans AI girlfriend, $X in Y weeks, "passive income" with AI, etc.). These surface on Twitter/X, YouTube, Reddit, or AI newsletter spam.
+
+### Step 1: Identify the Original Source
+
+| Source Type | Credibility | Typical Motive |
+|-------------|-------------|----------------|
+| Twitter/X thread by anon account | 🟡 Low | AI tool marketing, follower growth |
+| YouTube "I made $X with AI" video | 🟡 Low | Affiliate links, ad revenue, course sales |
+| Reddit (r/passiveincome, r/Entrepreneur) | 🟡 Low | Attention test, referral farming |
+| TechCrunch/Forbes/Forbes contributor post | 🟢 Medium | Often just rewrites the Twitter thread |
+| Genuine interview with verifiable identity | 🟢 Higher | Rare |
+
+**Pattern: most of these stories are monocausal** — one source, one tweet, no follow-up, no independent verification. If every article about it links back to the same single social media post, treat with maximum skepticism.
+
+### Step 2: Check Platform Policy Compliance
+
+The story often ignores whether the platform actually allows what's described:
+
+| Platform | AI Policy | Implication |
+|----------|-----------|-------------|
+| OnlyFans | Bans AI-generated content impersonating real people; requires gov ID verification | AI "virtual girlfriend" can't legally operate an OF account |
+| Patreon/Fanvue | More permissive but still requires real account holder | Possible but capped |
+| Fiverr/Upwork | Prohibits AI-generated work sold as human-made | Accounts get banned, earnings forfeited |
+| YouTube/TikTok monetization | Requires disclosure for AI-generated content | Limits reach and ad revenue |
+| Subscription platforms (Substack, etc.) | Varies by payment processor (Stripe bans AI porn) | Payouts can be frozen |
+
+**Key question:** Can the described activity actually survive platform enforcement for more than a month? If the answer requires violating ToS, the "4 weeks" timeline means it's about to get banned.
+
+### Step 3: Reality-Check the Numbers
+
+Use industry baselines to sanity-check claimed revenue:
+
+| Platform / Activity | Industry Reality | Claim Red Flag Threshold |
+|---------------------|-----------------|--------------------------|
+| OnlyFans (new creator, zero following) | Top 1% = $5-15K/mo, after months of growth | >$20K in month 1 |
+| YouTube (new channel) | $1-3 CPM, need 100K views/mo for $200 | Claims of $5K/mo in first month |
+| Etsy (digital products, no audience) | Average $200-500/mo first 3 months | >$5K in first month |
+| Affiliate marketing (no list) | 0.5-2% conversion, need 10K+ visitors | >$10K in first month |
+| AI SaaS (solo founder, no launch) | $0-500 MRR first 3 months typical | >$10K MRR in first month |
+
+**Rule of thumb:** If the claimed monthly revenue is >10x the industry baseline for a new entrant with no audience, the number is marketing, not reporting.
+
+### Step 4: Separate Technical Feasibility from Financial Results
+
+**"Could this be done?"** and **"Was this done at that scale?"** are two different questions.
+
+- Technical feasibility: Evaluate the tool stack (e.g., Flux+LoRA for images, ElevenLabs for voice, Claude Code for automation) — yes, these tools exist and can do this.
+- **Financial claim verification**: Much harder — requires auditable revenue, platform dashboard screenshots with metadata, tax records, or third-party verification.
+- **The marketing trick**: Mix a true technical claim ("yes, you can generate consistent character images with Flux+LoRA") with an unverifiable financial claim ("and I made $43K in one month"). The true half carries credibility to the false half.
+
+### Step 5: Classify the Claim
+
+| Classification | Definition | Example |
+|----------------|------------|---------|
+| 🟢 **Verified** | Independent third-party evidence exists, numbers auditable | Extremely rare for viral stories |
+| 🟡 **Plausible but unverified** | Technical route makes sense, numbers within baseline range | "Made $2K with AI art on Redbubble" |
+| 🟠 **Technically feasible, numbers exaggerated** | Tech works, but claimed revenue is 5-10x industry baseline | Most "AI girlfriends" stories |
+| 🔴 **Product Story (营销叙事)** | Tech is real but exists primarily to market the tools involved | Specific tools named prominently, no verifiable identity for the creator |
+| 💀 **Scam** | Tech doesn't work or requires upfront payment for the "secret" | "Buy my course to learn the method" |
+
+**Most viral AI monetization stories** fall into 🟠 or 🔴 — technically possible at small scale, but the blockbuster numbers are marketing tools to drive affiliate signups or course sales.
+
+### Step 6: Provide Realistic Alternative
+
+When the user wants to explore the idea after debunking, provide:
+
+- Realistic first-month revenue (typically 1-10% of the claimed number)
+- Actual tool costs (Flux LoRA training: ~$5-10, ElevenLabs: $5-22/mo, Claude Code: $20/mo)
+- Hidden costs: time to iterate on LoRA training, content moderation, platform fees, payment processing
+- Biggest risk specific to the claim (e.g., OnlyFans policy enforcement against AI content)
+- Honest assessment: "This is a side project, not a business. Treat it as a learning experiment."
+
+### Reference
+
+- `references/viral-ai-claim-examples.md` — worked examples of specific viral claim analyses
+
+---
+
 ## The User's Litmus Test
 
 When the user reviews your analysis, their corrections are signals:
