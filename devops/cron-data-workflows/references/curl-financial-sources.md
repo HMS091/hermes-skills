@@ -1,6 +1,6 @@
 # Curl-Friendly Financial News Sources (Cron / Blocked Environments)
 
-**Last updated:** 2026-07-09 (added CNBC RSS Investing/Economy/Politics feed IDs, MarketWatch alt/realtime RSS endpoints)
+**Last updated:** 2026-07-14 (added NPR News RSS and Ars Technica RSS as curl-friendly geopolitics/tech sources for selective-block fallback)
 
 ## Why This Matters
 
@@ -19,6 +19,8 @@ In cron jobs, tools like `web_search`, `execute_code`, and piped `curl | python3
 | **MarketWatch RSS** | `feeds.content.dowjones.io/public/rss/mw_topstories` | ★★★★☆ | Top stories from MarketWatch via Dow Jones RSS. Clean XML, no Cloudflare. Runs about 10-15 headlines covering broad market, consumer, politics. No ticker-specific feeds. |
 | **MarketWatch RSS (alt)** | `feeds.marketwatch.com/marketwatch/topstories/` | ★★★★☆ | Alternative MarketWatch RSS endpoint. Same content, different CDN. Use as fallback if dowjones.io is unreachable. |
 | **MarketWatch (realtime)** | `feeds.marketwatch.com/marketwatch/realtimeheadlines/` | ★★★☆☆ | Real-time headlines feed from MarketWatch. Faster updates but fewer articles per fetch (~5-8 headlines). Good for time-sensitive breaking news (Fed decisions, earnings releases, geopolitical flashpoints). Use alongside the main topstories feed for comprehensive coverage. |
+| **NPR News RSS** | `npr.org/rss/rss.php?id=1001` | ★★★★☆ | **Best geopolitics/policy source for curl.** The News feed (`id=1001`) returns headlines covering US politics, international conflict (Iran/Middle East), and economic policy — exactly the content needed for gold/macro briefing sections. No Cloudflare, no JS, clean XML. **Works when other financial sources are selectively blocked** (see Selective Site Blocking below). Particularly valuable for briefings where geopolitics (US-Iran, Hormuz, trade wars) drives gold and macro analysis. |
+| **Ars Technica RSS** | `arstechnica.com/feed/` | ★★★★☆ | **Best tech/EV/semiconductor supplemental source.** Covers AI model competition, EV policy (California rebates), chip industry trends (memory shortages), and tech IP litigation (Apple vs OpenAI). No Cloudflare. Broad topic coverage allows cross-referencing tech news with financial news from CNBC/MarketWatch. Particularly useful when CNBC Tech feed returns insufficient NVDA/TSLA headlines — Ars Technica typically has 2-3 relevant stories per day. |
 | **MarketWatch (stock pages)** | `marketwatch.com/investing/stock/{TICKER}` | ★★★★☆ | **Stock-specific pages** (`/investing/stock/nvda`, `/investing/stock/tsla`) serve raw HTML with news headlines. No Cloudflare on these subpages. Article titles are in `<a>` tags nested inside `class=article__content` divs. **Main site** (`/`) may still have Cloudflare &#8212; use stock-specific URLs. Good for ticker-specific headlines + general market news sidebar. |
 
 
