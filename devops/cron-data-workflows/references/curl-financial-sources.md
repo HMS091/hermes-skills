@@ -1,6 +1,6 @@
 # Curl-Friendly Financial News Sources (Cron / Blocked Environments)
 
-**Last updated:** 2026-07-14 (added NPR News RSS and Ars Technica RSS as curl-friendly geopolitics/tech sources for selective-block fallback)
+**Last updated:** 2026-07-15 (added Seeking Alpha RSS feeds as per-ticker financial analysis source for cron briefings)
 
 ## Why This Matters
 
@@ -19,6 +19,7 @@ In cron jobs, tools like `web_search`, `execute_code`, and piped `curl | python3
 | **MarketWatch RSS** | `feeds.content.dowjones.io/public/rss/mw_topstories` | ★★★★☆ | Top stories from MarketWatch via Dow Jones RSS. Clean XML, no Cloudflare. Runs about 10-15 headlines covering broad market, consumer, politics. No ticker-specific feeds. |
 | **MarketWatch RSS (alt)** | `feeds.marketwatch.com/marketwatch/topstories/` | ★★★★☆ | Alternative MarketWatch RSS endpoint. Same content, different CDN. Use as fallback if dowjones.io is unreachable. |
 | **MarketWatch (realtime)** | `feeds.marketwatch.com/marketwatch/realtimeheadlines/` | ★★★☆☆ | Real-time headlines feed from MarketWatch. Faster updates but fewer articles per fetch (~5-8 headlines). Good for time-sensitive breaking news (Fed decisions, earnings releases, geopolitical flashpoints). Use alongside the main topstories feed for comprehensive coverage. |
+| **Seeking Alpha RSS** | `seekingalpha.com/api/sa/combined/{SYMBOL}.xml` | ★★★★☆ | **Best per-ticker financial analysis news source for cron.** Each symbol returns a feed of Seeking Alpha articles — analyst ratings, earnings previews, investment theses, and sector analysis. Clean XML via plain curl, no Cloudflare, no JS. Titles are rich (e.g. \"Nvidia: The Valuation Gap May Collapse With This Q2 Catalyst, Lifting The Stock\") with publication dates and author names. No article descriptions in feed — titles alone are sufficient for briefing topics. Supports any stock symbol (NVDA, TSLA, GLD, AAPL, AMD). Complements Google News RSS (which covers broader/summarized news) with in-depth financial analysis. See full section below. |
 | **NPR News RSS** | `npr.org/rss/rss.php?id=1001` | ★★★★☆ | **Best geopolitics/policy source for curl.** The News feed (`id=1001`) returns headlines covering US politics, international conflict (Iran/Middle East), and economic policy — exactly the content needed for gold/macro briefing sections. No Cloudflare, no JS, clean XML. **Works when other financial sources are selectively blocked** (see Selective Site Blocking below). Particularly valuable for briefings where geopolitics (US-Iran, Hormuz, trade wars) drives gold and macro analysis. |
 | **Ars Technica RSS** | `arstechnica.com/feed/` | ★★★★☆ | **Best tech/EV/semiconductor supplemental source.** Covers AI model competition, EV policy (California rebates), chip industry trends (memory shortages), and tech IP litigation (Apple vs OpenAI). No Cloudflare. Broad topic coverage allows cross-referencing tech news with financial news from CNBC/MarketWatch. Particularly useful when CNBC Tech feed returns insufficient NVDA/TSLA headlines — Ars Technica typically has 2-3 relevant stories per day. |
 | **MarketWatch (stock pages)** | `marketwatch.com/investing/stock/{TICKER}` | ★★★★☆ | **Stock-specific pages** (`/investing/stock/nvda`, `/investing/stock/tsla`) serve raw HTML with news headlines. No Cloudflare on these subpages. Article titles are in `<a>` tags nested inside `class=article__content` divs. **Main site** (`/`) may still have Cloudflare &#8212; use stock-specific URLs. Good for ticker-specific headlines + general market news sidebar. |
@@ -192,6 +193,8 @@ grep -oP '(?<=<title>)[^<]+' /tmp/nvda_news.xml | head -15
 
 **Caveat:** Google News RSS does not include article body text — only titles, links, source, and publication date. For the purpose of a briefing, titles are usually enough to identify key themes. The full article body from curl is available via MarketWatch stock pages or CNBC RSS for the most important stories.
 
+**When Google News RSS returns empty:** On some cron runs, Google News RSS returns 0 bytes (geolocation-based blocking). Seeking Alpha RSS (`/api/sa/combined/{SYMBOL}.xml`) is a completely different source type hosted on a different domain — it typically works even when Google News is blocked. Run both in parallel: if Google News returns 0 bytes, Seeking Alpha results fill the gap.
+
 **Fallback — CSS-heavy HTML extraction (if RSS ever breaks):**
 
 ```bash
@@ -203,6 +206,90 @@ cat /tmp/gn_nvda.html | tr '>' '\n' | grep -A1 'DY5T1d' | head -20
 ```
 
 **Gold-specific:** `news.google.com/rss/search?q=gold+price+XAU+2026&hl=en-US&gl=US&ceid=US:en`
+
+## ✅ Seeking Alpha RSS Feeds (Per-Ticker Financial Analysis News)
+
+**Seeking Alpha RSS (`seekingalpha.com/api/sa/combined/{SYMBOL}.xml`) is the best source for stock-specific financial analysis in cron jobs.** Unlike Google News RSS which aggregates general news, Seeking Alpha feeds contain analyst-written articles — earnings previews, investment theses, bull/bear cases, and sector deep dives. No Cloudflare, no JS, clean XML via plain curl.
+
+**Key differences from Google News RSS:**
+
+| Feature | Google News RSS | Seeking Alpha RSS |
+|---------|----------------|-------------------|
+| Content type | General news headlines (Reuters, Bloomberg, etc.) | Financial analysis articles (ratings, theses, reports) |
+| Title richness | Summarized/stripped | Full analysis titles with actionable context |
+| Author | Source publication name | Named analysts and contributors |
+| Per-ticker uniqueness | Multiple sources cover same news | Single feed per symbol, focused on that stock |
+| Article descriptions | Not included | Not included (titles-only) |
+| Update frequency | Throughout the day | 2-10 articles per day per popular symbol |
+
+**Extraction pattern (cron-safe, two-step):**
+
+```bash
+# Step 1: Fetch feed — one curl per symbol, run in parallel
+curl -sL "https://seekingalpha.com/api/sa/combined/NVDA.xml" \
+  -H "User-Agent: Mozilla/5.0" \
+  -o /tmp/sa_nvda.xml
+
+curl -sL "https://seekingalpha.com/api/sa/combined/TSLA.xml" \
+  -H "User-Agent: Mozilla/5.0" \
+  -o /tmp/sa_tsla.xml
+
+# Gold/commodities — use GLD ETF as proxy
+curl -sL "https://seekingalpha.com/api/sa/combined/GLD.xml" \
+  -H "User-Agent: Mozilla/5.0" \
+  -o /tmp/sa_gld.xml
+```
+
+**Extracting article titles + dates (cron-safe):**
+
+```bash
+python3 -c "
+import xml.etree.ElementTree as ET
+tree = ET.parse('/tmp/sa_nvda.xml')
+root = tree.getroot()
+for item in root.findall('.//item'):
+    title = item.find('title')
+    pubdate = item.find('pubDate')
+    if title is not None and title.text and len(title.text) > 15:
+        date_str = pubdate.text if pubdate is not None else '(no date)'
+        print(f'  • {title.text}')
+        print(f'    ({date_str})')
+"
+```
+
+**Example output (real, July 2026):**
+```
+  • US official says H200 chip shipments to China have begun; Reuters names ZTE among licensed buyers
+    (Tue, 14 Jul 2026 11:49:17 -0400)
+  • Nvidia, Mitsubishi Heavy mull team up for AI data center cooling, power: report
+    (Tue, 14 Jul 2026 11:14:42 -0400)
+  • Nvidia: The Valuation Gap May Collapse With This Q2 Catalyst, Lifting The Stock
+    (Tue, 14 Jul 2026 10:44:37 -0400)
+  • Skyworks gets rating cut; Nvidia, Intel among those seeing price target boost at KeyBanc
+    (Tue, 14 Jul 2026 09:19:19 -0400)
+  • Nvidia halves Asian AI chip buyer list amid tighter China screening — report
+    (Tue, 14 Jul 2026 00:10:36 -0400)
+```
+
+**Combined use with Google News RSS:** Run both sources in parallel for maximum coverage. Google News RSS gives broad headlines; Seeking Alpha gives analytical depth. Merge in the briefing — Google News for timely news, Seeking Alpha for analysis/ratings/thesis.
+
+**Supported symbols:** Any stock ticker (NVDA, TSLA, GLD, AAPL, AMD, MSFT, GOOGL, etc.). For gold/commodities without direct stock tickers, use GLD (gold ETF) — GLD articles cover gold price drivers, Fed policy, and inflation, which map naturally to the XAU briefing section.
+
+**XML structure (no `<description>` in items):**
+```xml
+<item>
+  <title>Article title</title>
+  <link>https://seekingalpha.com/symbol/NVDA/news</link>
+  <guid>seekingalpha.com/MarketCurrent:4613652</guid>
+  <pubDate>Tue, 14 Jul 2026 11:49:17 -0400</pubDate>
+  <sa:author_name>Author Name</sa:author_name>
+  <!-- No <description> element — titles-only -->
+</item>
+```
+
+**Pitfall — no article body in feed:** Items lack `<description>` — titles, dates, authors, and links only. This is sufficient for briefing topics since titles are rich enough for theme identification. If article body is needed, follow the link (may face Cloudflare). For cron briefings, titles alone suffice.
+
+**Priority in news-gathering order:** Between Google News RSS (step 2) and CNBC RSS (step 3) — Seeking Alpha is per-ticker analysis while CNBC is broader market context.
 
 ## ✅ Hacker News Algolia API (Tech Company News Supplement)
 
@@ -289,8 +376,9 @@ Without `--compressed`, Yahoo returns raw gzip bytes that python3 can't read wit
 
 1. **Primary:** `market_news` from pre-run JSON (collected by script, no restrictions)
 2. **Secondary:** Google News RSS feeds — per-ticker searches (NVDA/TSLA/gold), clean XML, no Cloudflare
-3. **Tertiary:** CNBC RSS feeds (multiple categories, no Cloudflare, best quality for broad context)
-4. **Quaternary:** Investing.com RSS for Fed/economy news; MarketWatch RSS for broad market
-5. **Quinary:** MarketWatch stock pages for ticker-specific article text
-6. **Senary:** Synthesize from known context + technical analysis (education, not invention)
-7. **Last resort:** Browser navigation to Yahoo Finance news section
+3. **Tertiary:** Seeking Alpha RSS feeds — per-ticker analysis (ratings, theses, earnings previews), clean XML via curl
+4. **Quaternary:** CNBC RSS feeds (multiple categories, no Cloudflare, best quality for broad context)
+5. **Quinary:** Investing.com RSS for Fed/economy news; MarketWatch RSS for broad market
+6. **Senary:** MarketWatch stock pages for ticker-specific article text
+7. **Septenary:** Synthesize from known context + technical analysis (education, not invention)
+8. **Last resort:** Browser navigation to Yahoo Finance news section
