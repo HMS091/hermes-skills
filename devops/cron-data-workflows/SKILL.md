@@ -292,6 +292,14 @@ curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 https://www.google.co
 - Every external call will time out (typically 15-60s each), wasting tool calls and wall-clock time
 - Proceed directly to the **Total Air Gap Fallback** pattern below
 
+**Additional curl failure signals (probe not required if you already see these):**
+- `exit code 7` — curl "couldn't connect to host" (DNS resolution failed or net unreachable)
+- `exit code 28` — curl operation timed out
+- `exit code 6` — curl "couldn't resolve host" (DNS failure)
+- Any combination of these across 2+ different external domains confirms network isolation. Stop trying further curls immediately — every failed call costs 15-30s of wall-clock time and a tool-call slot.
+
+**The "Script Succeeds, Agent Fails" pattern:** The pre-run data-collection script may have network access and produce perfect `{script_output}` JSON, while the agent phase has no network access. This is a distinct failure mode — the raw data is FRESH and CORRECT, but the agent cannot enrich it with news/search. Detect this by probing a financial source (e.g. CNBC RSS) after confirming the `{script_output}` JSON has good data. If the probe fails, skip web enrichment and proceed directly to the **Total Air Gap Fallback** workflow below (which handles rich local data just fine).
+
 **When response is `200`:**
 - Proceed with the normal news gathering priority below
 
@@ -312,7 +320,12 @@ When the connectivity probe returns `000` — no internet access at all — the 
 3. **Derive multi-day trends** from the price sequence (see `references/multi-day-trend-analysis.md`)
 4. **Carry forward relevant context** from the previous briefing's "今日热点" and "宏观环境" sections — geopolitics (Iran, Fed, tariffs) and structural themes (AI spend, price wars) don't change daily
 5. **Update risk assessments** from previous briefing against current prices (e.g., "$200 support tested and held" or "$400 support broken")
-6. **The "热点" section becomes analysis-led**: frame headlines as "NVDA反弹+3.9%, $200底部确认" (price-action-based) rather than news-driven, since no external news is available
+6. **The "热点" section becomes analysis-led**: frame headlines as "NVDA三连阴累跌-10%，$205前低岌岌可危" (price-action-based trend narrative) rather than news-driven, since no external news is available
+
+**Key data points to compute from local files when no enrichment is available:**
+- **Multi-day change**: compare today's `{script_output}` price against yesterday's briefing price (not just the session change). E.g., NVDA $205.65 vs yesterday's $211.50 = -$5.85/-2.77% — far larger than the session -0.84%. This reveals the true bearish trend that the single-session change number obscures.
+- **Three-way correlation**: when all three assets (NVDA, TSLA, gold) fall simultaneously, flag it as a systemic risk-off signal — this is the most important macro observation in a zero-news environment.
+- **Volume comparison**: compare today's volume against the previous day's (from the prior briefing markdown) to detect abnormal activity beyond what the raw session change shows.
 
 **Example: Converting zero-news day into a meaningful briefing:**
 ```markdown
