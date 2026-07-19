@@ -1,6 +1,6 @@
 # 📋 每日投资简报 — {collection_date}
 
-📡 数据采集时间: {collection_time}
+📡 数据采集时间: {collection_time} (北京时间)
 
 ## 📊 三大标的行情概览
 
@@ -14,25 +14,25 @@
 
 ## 🔥 今日热点
 
-### 🖥️ 英伟达
+### 🖥️ 英伟达 ({nvda_price})
 1. **热点标题** — 简要分析（1-2句概括影响）
 2. **热点标题** — 简要分析
 
-### 🚗 特斯拉
+### 🚗 特斯拉 ({tsla_price})
 1. **热点标题** — 简要分析
 2. **热点标题** — 简要分析
 
-### 🥇 黄金
+### 🥇 黄金 ({gold_price})
 1. **热点标题** — 简要分析
 2. **热点标题** — 简要分析
 
 ## 📈 技术面简析
 
-### NVDA ($xxx.xx)
-短期趋势判断，关键支撑/阻力位，RSI/成交量状态
+### NVDA ({nvda_price})
+短期趋势判断，关键支撑/阻力位，RSI/成交量状态，是否超买/超卖
 
-### TSLA ($xxx.xx)
-短期趋势判断，关键支撑/阻力位，RSI/成交量状态
+### TSLA ({tsla_price})
+短期趋势判断，关键支撑/阻力位，RSI/成交量状态，MACD信号
 
 ### XAU ($x,xxx/oz)
 短期趋势判断，关键支撑/阻力位，驱动因素
@@ -67,6 +67,8 @@ Use when ALL web news sources return 0 bytes — Google News RSS, Yahoo, CNBC, R
 - **每个标的控制在5-8行** — tight bullets, not paragraphs
 - **结论先行** — give the judgment first, then supporting reasoning
 - **有具体数据支撑** — cite prices, percentages, analyst targets
+- **价格写入节标题** — 技术面分析用 `### NVDA ($202.81)` 格式，热点用 `### 🖥️ 英伟达 ($202.81)`，便于快速定位
+- **风险条目标注严重等级** — 在风险提示条目尾部标注等级：`（高）` `（中高）` `（中）`，帮助区分优先级
 - **必须包含风险警示** — don't sugarcoat, don't hide negatives
 - **数据源争议时加脚注** — if script data conflicts with verified sources, add ⚠️ disclaimer footnote
 - **周末简报额外要求** — ①强制在数据说明行标注数据滞后天数 ②"今日热点"优先覆盖周末事件 ③技术面分析用条件句（"若开盘后"、"需关注是否守住"）④黄金部分前置地缘政治

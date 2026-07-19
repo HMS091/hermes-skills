@@ -1,7 +1,7 @@
 ---
 name: web-research
 description: "Web research for SaaS/platform/service alternatives AND deep-dive forum/community crawling — find, compare, and evaluate online services, products, and community knowledge. Covers search engine fallback strategies in restricted environments, proxy-based searching, forum registration/crawling (NodeBB/Discourse/XenForo), Bilibili scraping, cross-region price comparison, and commercial clone-script research."
-trigger: "User asks to find alternative websites, platforms, or services matching specific criteria — any 'find me X like Y' task. Also: user asks to research a private company's user numbers, revenue, or financial data (corporate/company research); user asks to investigate or validate a specific website/service; user asks to 'go learn from' or 'research on' a specific forum or community; user asks for hardware/software comparison where community knowledge is primary source; user asks to find contact info for a Chinese content creator on Bilibili."
+trigger: "User asks to find alternative websites, platforms, or services matching specific criteria — any 'find me X like Y' task. Also: user asks to research a private company's user numbers, revenue, or financial data (corporate/company research); user asks to investigate or validate a specific website/service; user asks to 'go learn from' or 'research on' a specific forum or community; user asks for hardware/software comparison where community knowledge is primary source; user asks to find contact info for a Chinese content creator on Bilibili. ALSO: user asks to research a publicly traded stock/equity (news, analyst ratings, competitor moves, product announcements, earnings) — falls under the Financial Market Research section."
 ---
 
 # Web Research: Service/Platform Comparison
@@ -1008,19 +1008,71 @@ Pattern for researching a **publicly traded company's stock** — recent news, a
 
 #### Primary Data Sources (work from restricted environments with no browser)
 
-When the browser times out and financial sites (Yahoo Finance, Investing.com) block direct curl access, use these RSS/API feeds:
+When the browser times out and financial sites (Yahoo Finance, Investing.com) block direct curl access, use these sources in priority order:
+
+**🥇 BEST: CNBC Quote Page (Embedded JSON)** — richest single source
+
+The CNBC quote page (`https://www.cnbc.com/quotes/{TICKER}`) embeds massive structured data in `window.__c_data`, including:
+- Current price, daily/weekly/monthly/YTD change, market cap
+- 52-week high/low with dates
+- Peers comparison (top competitors with market cap, price, change %)
+- Earnings history (actual vs estimated EPS, surprise direction) and future estimates
+- Next earnings date
+- Related news headlines (extractable via grep)
+
+**Extraction pattern — news headlines:**
+```bash
+curl -sL "https://www.cnbc.com/quotes/NVDA" -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" | grep -oP '"headline":"[^"]*"' | head -20
+```
+Filter boilerplate with `grep -v -E 'stocks|investing|markets|video|club|evening'`. This yields analyst calls, trade tracker moves, market commentary specific to the stock.
+
+**Extraction pattern — structured financial data from `window.__c_data`:**
+
+The CNBC page HTML is **huge (700K+ chars)** — save to file, don't pipe:
+```bash
+curl -sL "https://www.cnbc.com/quotes/NVDA" -H "User-Agent: Mozilla/5.0" -o /tmp/cnbc.html
+python3 -c "
+import re, json
+with open('/tmp/cnbc.html') as f:
+    text = f.read()
+m = re.search(r'window\.__c_data\s*=\s*(\{.+?\});', text, re.DOTALL)
+if m:
+    data = json.loads(m.group(1))
+    root = data.get('ROOT_QUERY', {})
+    for key, val in root.items():
+        print(f'{key[:80]}')
+"
+```
+
+**Key data points from `window.__c_data` ROOT_QUERY:**
+| Data | Query Key Pattern | Structure |
+|------|-------------------|-----------|
+| Stock price changes | `returnsData` (in page-level JSON, indexed by type) | Array of {type:"5D"|"1MO"|"3MO"|"1Y"|"YTD", closePrice, closeDate, change, changePct} |
+| 52-week range | `getRangeData` with key `FIFTY_TWO_WEEK` | `.ranges[].{high, highDate, low, lowDate}` |
+| Market cap & peers | `getTopPeers` | `.topPeersList[].{symbol, companyName, last, change_pct, marketCap}` |
+| Earnings data | `getEarningsData` | `.earnings.lstEarningsBean[].{announcedDate, epsAdjActualValue, epsEstimatedValue, nextEarningsDate, surprise, fiscalYear}` |
+| Next earnings date | First bean with null `announcedDate` → `nextEarningsDate` | Date string e.g. "2026-08-26" |
+
+**Pitfalls:**
+- CNBC page HTML is 700K+ chars — save to file first
+- `window.__c_data` is pure JSON — parse with `json.loads()`, not regex
+- Headline grep returns boilerplate ("stocks", "Investing", "Markets", "club") — filter with `grep -v`
+- Completed earnings have `announcedDate` + `epsAdjActualValue`; future quarters have `nextEarningsDate` + only `epsEstimatedValue`
+- Market cap is in the `topPeersList` entry where `companyName` matches the symbol
+
+**🥈 SECONDARY: Tech/Semiconductor Product News via Tom's Hardware Search**
+
+For chip/GPU/semiconductor stocks (NVDA, AMD, INTC) specifically, Tom's Hardware search yields detailed product announcements (Vera Rubin, Blackwell Ultra, etc.) with clear titles and dates. Works reliably from restricted environments via curl:
+
+```bash
+curl -sL "https://www.tomshardware.com/search?searchTerm=vera+rubin+NVL72+production+2026" -H "User-Agent: Mozilla/5.0" | sed 's/<[^>]*>//g' | grep -i -E 'nvidia|rubin|blackwell|vera|production|NVL' | head -20
+```
+
+**Pitfall:** Tom's Hardware search result pages are large (100K+ chars) with extensive JSON config. Strip HTML tags and grep for keywords. The search meta-titles appear in `<h3 class="loop-link">` tags and in JSON-LD structured data.
+
+**🥉 FALLBACK: RSS Feeds & Other Sources**
 
 | Source | URL Pattern | Data | Auth |
-|--------|-------------|------|------|
-| **Seeking Alpha RSS** | `https://seekingalpha.com/api/sa/combined/{TICKER}.xml` | 30 most recent news items with headlines, dates, links. Covers analyst upgrades/downgrades, earnings, product news, competitor coverage. | None (RSS, no auth) |
-| **CNBC Technology / Semicon RSS** | `https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id={CATEGORY_ID}` | Industry-level news (chip sector, AI, etc.) | None |
-| **Trading Economics** | `https://zh.tradingeconomics.com/{TICKER}:us` (NVDA→nvda:us) | Stock price, daily change, YTD performance, analyst forecasts | None |
-| **East Money (东方财富)** | `https://quote.eastmoney.com/us/{TICKER}.html` | Chinese-language stock quote page (JS-heavy, data partially server-rendered) | None |
-
-**Seeking Alpha RSS category IDs for CNBC:**
-- `19854910` = Technology
-- `100006642` = (semiconductor — may not work)
-- `100003114` = US Markets
 
 #### Workflow
 
@@ -1087,7 +1139,8 @@ When the browser times out and financial sites (Yahoo Finance, Investing.com) bl
 
 #### Reference File
 
-See `references/equity-research-sources.md` for full RSS endpoint list, CNBC category IDs, and worked examples.
+- `references/equity-research-sources.md` — Full RSS endpoint list for equity research, CNBC category IDs, and Seeking Alpha worked examples
+- `references/cnbc-embedded-data-extraction.md` — CNBC quote page `window.__c_data` extraction: stock price, market cap, peers, earnings, 52-week range, news headlines. NVDA July 2026 worked example with full extraction commands.
 
 ### Commodities, Forex, Macro Research
 

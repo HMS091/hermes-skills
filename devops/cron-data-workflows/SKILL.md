@@ -292,6 +292,19 @@ curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 https://www.google.co
 - Every external call will time out (typically 15-60s each), wasting tool calls and wall-clock time
 - Proceed directly to the **Total Air Gap Fallback** pattern below
 
+**Diagnostic signals of total network isolation (what to look for):**
+
+| Tool | Symptom | Duration | Signal |
+|------|---------|----------|--------|
+| `curl` to Google | DNS resolves (both A/AAAA), IPv6 fails instantly ("Network is unreachable"), IPv4 hangs | 10-15s per curl | exit code 28 (timeout) |
+| `curl` to news APIs | Empty stdout, exit code 0 (silent failure) | ~15s per curl | No error message — looks like success but returns 0 bytes |
+| `browser_navigate` to Google | 120s timeout, `{"success": false, "error": "Command timed out after 120 seconds"}` | 120s | Distinct "browser daemon starting" or "timed out" error |
+| `browser_navigate` to Yahoo | Redirects through Google, loads Google "took too long to respond" page | 10-30s | Page title or body shows `"www.google.com took too long to respond"` — **not** a Yahoo consent wall or Yahoo content |
+
+**Key diagnostic insight:** If `browser_navigate` to Yahoo shows a Google timeout error page (not a Yahoo error page), it means the browser's **proxy/DNS resolution is broken at the system level**, not that Yahoo is blocking you. The browser is being redirected through Google's infrastructure and failing there. This is a smoking gun for total network isolation — stop all web attempts immediately.
+
+**IPv4/IPv6 dual-stack time sink:** `curl` will try IPv6 first (instant failure: "Network is unreachable"), then try IPv4 (hangs for `--connect-timeout` duration). Each curl call takes 10-15s even with `--connect-timeout 10` because the IPv6→IPv4 fallback adds latency. **The connectivity probe should account for this:** `--connect-timeout 5` may take 10s to return `000` because of the dual-stack fallback. If the probe itself takes >8s to return, treat the result as `000` immediately — you are in an IPv6-broken / no-IPv4-route environment.
+
 **Additional curl failure signals (probe not required if you already see these):**
 - `exit code 7` — curl "couldn't connect to host" (DNS resolution failed or net unreachable)
 - `exit code 28` — curl operation timed out
@@ -571,7 +584,7 @@ Save it at `/opt/data/briefings/{date}_raw.json` **before** running `generate_br
 
 ## Common Pitfalls
 
-- **Total network isolation (curl returns `000`)**: Some cron environments have zero internet access. All curls (Google News RSS, CNBC, Nasdaq API) and browser calls will time out. Always probe with `curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 https://www.google.com` first. If it returns `000`, skip ALL external fetches and go straight to the **Total Air Gap Fallback** pattern (multi-day trend analysis + previous briefing context carryover).
+- **Total network isolation (curl returns `000`)**: Some cron environments have zero internet access. All curls (Google News RSS, CNBC, Nasdaq API) and browser calls will time out. Always probe with `curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 https://www.google.com` first. If it returns `000`, skip ALL external fetches and go straight to the **Total Air Gap Fallback** pattern (multi-day trend analysis + previous briefing context carryover). See the **Network Connectivity Check** section above for the IPv4/IPv6 dual-stack diagnostic pattern (curl may take 10-15s even with `--connect-timeout 5` due to IPv6→IPv4 fallback).
 - **Yahoo Finance consent wall blocks price extraction**: Yahoo redirects datacenter IPs to `consent.yahoo.com/v2/collectConsent` — the page shows only a privacy dialog, no prices. Check the snapshot title for "Ihre Datenschutzeinstellungen" or "consent.yahoo.com" in the URL. **Do not retry Yahoo** — switch to Reuters stock pages (`reuters.com/markets/companies/{TICKER}.OQ/`) which work without consent walls.
 - **Browser timeout after multiple navigations in one session**: When making 3+ sequential `browser_navigate` calls in a cron job, later calls may timeout at 60s. If you need data from multiple pages, **batch curls for APIs** (Nasdaq API, Yahoo Chart API) for price data and use the browser only for the primary page. Alternative: navigate back with `browser_back()` to avoid new session overhead, or prioritize one comprehensive source (Reuters Markets page) that shows multiple tickers' context at once.
 - **Script referenced but never created**: The cron job may have been configured with `"script": "collect.py"` but the file was never written. This causes silent "Script not found" errors every run.
