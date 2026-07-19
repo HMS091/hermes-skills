@@ -364,6 +364,7 @@ When the user wants to explore the idea after debunking, provide:
 ### Reference
 
 - `references/viral-ai-claim-examples.md` — worked examples of specific viral claim analyses
+- `references/product-opportunity-discovery.md` — Product category discovery framework: margin × frequency × virality matrix. Use when user asks "what products meet conditions X, Y, Z" rather than evaluating a named project. Includes user-profile fit filter and industry baseline revenue data.
 
 ---
 
