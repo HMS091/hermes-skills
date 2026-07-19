@@ -364,7 +364,8 @@ When the user wants to explore the idea after debunking, provide:
 ### Reference
 
 - `references/viral-ai-claim-examples.md` — worked examples of specific viral claim analyses
-- `references/product-opportunity-discovery.md` — Product category discovery framework: margin × frequency × virality matrix. Use when user asks "what products meet conditions X, Y, Z" rather than evaluating a named project. Includes user-profile fit filter and industry baseline revenue data.
+- `references/product-opportunity-discovery.md` — Product category discovery framework: margin × frequency × virality matrix. Use when user asks "what products meet conditions X, Y, Z" rather than evaluating a named project. Includes: three-axis scoring system, high-unit-price vs high-frequency filtering, physical product hidden cost framework (shipping/returns/compliance/platform fees), China vs international marketplace comparison, user-profile fit filter, and industry baseline revenue data.
+- `references/referral-economics-framework.md` — Referral-based business model evaluation: "推荐N返1" (refer-N-get-1-free) economics, profitability threshold calculator (minimum 60% gross margin), digital vs physical product cost comparison matrix, product-type suitability table, and best-fit referral incentive design patterns.
 
 ---
 
