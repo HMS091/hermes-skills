@@ -500,7 +500,7 @@ Deliver a structured Chinese report with:
 
 ### Reference File
 
-See `references/ecommerce-brand-research-example.md` for worked example (BIOAQUA/泊泉雅 face mask full investigation).
+See `references/ecommerce-brand-research-example.md` for worked example (BIOAQUA/泊泉雅 face mask full investigation), including Shopify reseller analysis (thebioaqua.com) and real-time Alibaba factory pricing data.
 
 ---
 
