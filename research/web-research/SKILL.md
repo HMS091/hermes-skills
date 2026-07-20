@@ -373,6 +373,137 @@ GET /admin/subscriptions → 403 = subscription management module
 
 **Key**: HTTP 403 = route registered + functional but middleware blocked. HTTP 404 = route doesn't exist. Every 403 reveals a real admin module.
 
+## Special Application: E-Commerce Brand/Product Market Research (跨电商平台品牌调研)
+
+When the user asks to research a specific consumer brand or product for overseas selling — investigating its brand awareness, sales volume, pricing, number of sellers, social media presence, and advertising across multiple e-commerce and social platforms.
+
+### Trigger Signals
+
+User asks: "Research/analyze brand X for selling overseas", "What's the market for product Y abroad?", "Check the reputation/reviews/ratings of brand Z", "How many people are selling this product on Amazon?", "Does this brand advertise on social media?"
+
+### Workflow
+
+#### Phase 1: Amazon Reconnaissance (Primary E-Commerce Source)
+
+Amazon is the most informative single source for overseas brand/product viability.
+
+**1. Search on Amazon US:**
+```python
+browser_navigate(url=f"https://www.amazon.com/s?k={brand_name}")
+# Note: Amazon may autocorrect spelling — check the "Showing results for / Search instead for" line
+```
+
+**2. Extract key business signals from snapshot:**
+
+| Signal | Where to Find | Meaning |
+|--------|--------------|---------|
+| **Total result count** | Heading text: `"N results for ..."` | Number of products listed under brand |
+| **Ratings/Reviews** | `"X ratings"` link next to stars | Social proof; <100 = very low engagement |
+| **"X+ bought in past month"** | StaticText near ratings | Sales velocity indicator |
+| **Best Seller badge** | `group "Best Seller in ..."` | Only on top-selling products |
+| **Price** | Link text containing currency amount | Position vs competitors |
+| **Seller count** | `"(N new offers)"` or `"See options"` | Number of sellers for same product |
+| **Sponsored ads** | `button "View Sponsored information"` | Competitor ad spend level |
+| **Overall Pick badge** | `StaticText "Overall Pick"` | Amazon's algorithm choice for search term |
+
+**3. ⚠️ Critical: Amazon shows prices in YOUR delivery address currency.** If the delivery address is set to China, prices display in CNY, not USD. To get USD prices, either:
+   - Change delivery address to US (requires signing in)
+   - Divide CNY price by ~7.0 exchange rate as rough USD estimate
+   - Check product detail page for "List Price" or "Typical" references
+
+**4. Read cached browser snapshot files when browser times out.** After `browser_navigate` returns a large snapshot (truncated message), the full content is saved to a file path shown in the output:
+```
+[... NNN more lines truncated — full snapshot: read_file path="/opt/data/cache/web/browser-snapshot-xxxx.txt" offset=NNN limit=NNN]
+```
+Use `read_file()` to page through this data and extract structured product information.
+
+**5. Organize product data into table:**
+| Product Name | Specs | Rating | Ratings Count | Price (CNY) | Est. USD | Seller Count | Sales Signal |
+| Primary brand product | 5-pack | 4.3⭐ | 7 | ¥108 | ~$15 | 1-2 offers | No "bought" data |
+
+#### Phase 2: Brand Website Analysis
+
+Check if the brand has an official website — this reveals whether it's a consumer brand or an OEM/ODM manufacturer:
+
+```bash
+curl -sL --max-time 15 -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "https://{brand_domain}.com" | head -200
+```
+
+**Signals to extract:**
+| Signal | Indication |
+|--------|------------|
+| "Wholesale", "OEM", "ODM", "Private Label", "Custom LOGO" | This is a **manufacturer supplier**, not a consumer brand |
+| "Chat on WhatsApp", "Factory Price" | B2B sales model — direct wholesale |
+| WooCommerce/WordPress theme | DIY brand site, not professionally managed |
+| Multiple product categories (shampoo, serum, mask, body wash) | Factory with broad product line, not a focused brand |
+| SEO title includes "Wholesale OEM Manufacture" | The site targets resellers, not end consumers |
+
+**Key insight:** If the official site is a B2B wholesale/OEM platform, the Amazon listings are likely **small resellers buying from this factory**, not the brand itself running retail operations.
+
+#### Phase 3: Multi-Platform Cross-Reference
+
+Check these platforms for brand presence (treat timeouts gracefully — use curl, not browser, when possible):
+
+| Platform | What to Check | Curl Command |
+|----------|--------------|-------------|
+| **eBay** | Products listed, seller count, pricing | `curl -sL "https://www.ebay.com/sch/i.html?_nkw={brand}"` |
+| **AliExpress** | Wholesale pricing, Chinese sellers | `curl -sL "https://www.aliexpress.com/wholesale?SearchText={brand}"` |
+| **Walmart** | US retail presence | `curl -sL "https://www.walmart.com/search?q={brand}"` |
+| **Trustpilot** | Customer reviews/ratings | `curl -sL "https://www.trustpilot.com/search?query={brand}"` |
+| **YouTube** | Reviews, unboxings, ads | `curl -sL "https://www.youtube.com/results?search_query={brand}"` |
+
+**Pitfalls:** Many of these platforms block automated requests (Walmart shows "Robot or human?" CAPTCHA, TikTok/Instagram are JS-rendered SPAs, Trustpilot may show Cloudflare challenge). When blocked, note it transparently: "Platform blocked automated access — user should verify manually."
+
+#### Phase 4: Social Media & Advertising Check
+
+| Platform | How to Check | What to Look For |
+|----------|-------------|-----------------|
+| **TikTok** | Search via browser or curl | Brand content, influencer reviews, ad campaigns |
+| **Instagram** | Try `instagram.com/{brand}/` | Hashtags, branded content, sponsored posts |
+| **Google Ads** | Search for brand name | Sponsored results, shopping ads presence |
+| **Influencer Marketing** | Search "brand + review" | Number of influencer review videos/posts |
+
+**Signal:** Zero social media presence + no influencer content + no sponsored ads = brand has no overseas marketing investment.
+
+#### Phase 5: Competitor Benchmarking
+
+On Amazon search results, note the top competitors that appear alongside the brand (often as sponsored ads or Best Seller badges):
+
+| Competitor | Rating | Ratings Count | Bought/Month | Price | Key Advantage |
+| BIOAQUA | 4.3⭐ | 7 | None | ¥108 | Low competition |
+| BIODANCE | 4.5⭐ | 43,542 | 100K+ | ¥129 | Brand recognition, ad spend |
+| FACETORY | 4.5⭐ | 217 | — | ¥67 | Lower price point |
+| ZealSea | 4.7⭐ | 7,602 | 6K+ | ¥54 | High value, lots of reviews |
+
+#### Phase 6: Report Compilation
+
+Deliver a structured Chinese report with:
+
+1. **品牌概况** — Official site type, positioning, distribution model
+2. **Amazon销售数据（核心）** — Result count, ratings analysis, sales velocity, Best Seller presence, seller count
+3. **价格分析表** — Product pricing vs competitors per-unit pricing
+4. **销售渠道分布** — Which platforms have the brand, which don't
+5. **社媒和广告投放情况** — Summary table of platform presence (Present / Not Found / Blocked)
+6. **品牌定位真相** — Is it a real consumer brand or a factory selling to resellers?
+7. **市场评估与风险** — 有利因素/不利因素/关键风险 bullets
+8. **建议方向** — Options table with estimates
+
+### Pitfalls
+
+- **Amazon currency trap**: When delivery address is outside US, Amazon shows prices in local currency. A search from China shows ¥108.24 CNY (~$15 USD), but a US-based search would show `$14.99`. State the estimated USD price alongside any CNY data.
+- **Amazon autocorrects brand names**: When search returns "Showing results for X" vs "Search instead for Y", always try both spellings.
+- **Low ratings count doesn't mean bad product**: <100 reviews = statistically insignificant data. A 4.5⭐ with 3 ratings means nothing.
+- **No "bought in past month" badge** is the strongest negative signal — Amazon only shows this for products with meaningful sales velocity.
+- **Browser timeouts are common**: TikTok, Instagram, AliExpress all have JS-heavy pages that may time out. Use curl when possible, and document when a platform couldn't be checked.
+- **Brand website != brand**: The official site may be a B2B factory platform, not a consumer brand site. Differentiate carefully.
+- **Don't conflate "many products listed" with "good sales"**: A brand can have 80+ Amazon listings with near-zero sales on all of them.
+
+### Reference File
+
+See `references/ecommerce-brand-research-example.md` for worked example (BIOAQUA/泊泉雅 face mask full investigation).
+
+---
+
 ## Special Application: Cross-Region Product/Price Research (跨地区比价调研)
 
 When the user asks to compare prices of electronics/hardware across regions (e.g., HK vs China, US vs China) or wants real-time market data.
