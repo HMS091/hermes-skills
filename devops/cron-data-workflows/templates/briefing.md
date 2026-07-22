@@ -72,3 +72,4 @@ Use when ALL web news sources return 0 bytes — Google News RSS, Yahoo, CNBC, R
 - **必须包含风险警示** — don't sugarcoat, don't hide negatives
 - **数据源争议时加脚注** — if script data conflicts with verified sources, add ⚠️ disclaimer footnote
 - **周末简报额外要求** — ①强制在数据说明行标注数据滞后天数 ②"今日热点"优先覆盖周末事件 ③技术面分析用条件句（"若开盘后"、"需关注是否守住"）④黄金部分前置地缘政治
+- **黄金极端波动（单日$100+/3%+）处理** — ①必须列举3-4个驱动因素（单一因素无法解释极端波动）②RSI即使冲入70+超买区，在极端行情中可维持数日，不要自动视作卖出信号 ③支撑位需重新评估，前阻力位转化为新支撑 ④风险警告上调至"中高"等级 ⑤黄金+股票同时上涨的场景≠risk-off，应归因于宏观因素（降息预期重估、美元走弱）而非避险。详见 `references/gold-extreme-move-analysis.md`
