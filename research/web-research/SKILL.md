@@ -46,7 +46,23 @@ This environment has a Clash proxy (192.168.1.88:7890) that enables search acces
 2. **✅ Google** (via proxy) — works for most queries, returns text-searchable HTML
 3. **❌ Bing (via curl)** — returns empty/0-byte when accessed via curl from this environment. **However:**
    - **Bing China (cn.bing.com) works via Hermes browser** → use `browser_navigate` + `browser_snapshot` for Chinese search results. See `references/chinese-web-search-via-browser.md`.
-   - **Also works via Python `urllib` with mobile User-Agent** → when browser times out or is slow, use terminal with `urllib` + `Mozilla/5.0 (Linux; Android 14)` + Bing CN. This bypasses the desktop anti-bot detection that curl triggers. Example:
+   - **Also works via Python `urllib`** — two approaches depending on language needs:
+     
+     **⑴ International Bing (`www.bing.com`) for English results** — use standard desktop User-Agent via Python `urllib` (not curl). This returns richer English search results than cn.bing.com. Good for global brand/product research:
+     ```python
+     import urllib.request, urllib.parse
+     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+     query = urllib.parse.quote('search terms')
+     url = f'https://www.bing.com/search?q={query}&setlang=en'
+     req = urllib.request.Request(url, headers=headers)
+     r = urllib.request.urlopen(req, timeout=15)
+     html = r.read().decode('utf-8', errors='replace')
+     # Extract captions and links via regex
+     snippets = re.findall(r'<p class=\"b_lineclamp2\">(.*?)</p>', html, re.DOTALL)
+     links = re.findall(r'<a[^>]*href=\"(https?://[^\"]+)\"[^>]*>(.*?)</a>', html, re.DOTALL)
+     ```
+     
+     **⑵ Bing China (`cn.bing.com`) for Chinese results** — use mobile User-Agent to bypass anti-bot:
      ```python
      import urllib.request, urllib.parse
      headers = {'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36'}
@@ -57,6 +73,8 @@ This environment has a Clash proxy (192.168.1.88:7890) that enables search acces
      text = r.read().decode('utf-8', errors='replace')
      # Then extract results via regex on the cleaned HTML
      ```
+   
+   **Key difference**: `www.bing.com` (international) needs desktop User-Agent (curl's is too generic, blocked) but works via `urllib`; `cn.bing.com` (China) needs mobile User-Agent to bypass their stricter desktop anti-bot. Choose based on whether you need English or Chinese results.
 4. **⚠️ price.com.hk** — Cloudflare protected, does NOT work via curl. Use alternative sources for HK pricing.
 5. **ℹ️ Sites with Cloudflare**: Some sites (price.com.hk) have CF protection that blocks curl. Fall back to DuckDuckGo search to find cached/aggregator data.
 
@@ -440,6 +458,40 @@ curl -sL --max-time 15 -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)
 
 **Key insight:** If the official site is a B2B wholesale/OEM platform, the Amazon listings are likely **small resellers buying from this factory**, not the brand itself running retail operations.
 
+**💡 Shopify brand site: extract structured product data via JSON API**
+
+If the brand's official site is Shopify-based (detectable by `myshopify.com` in page source or `cdn.shopify.com` image URLs), their public `products.json` endpoint gives you complete product catalog with prices, variants, and images — all as clean JSON, no scraping needed:
+
+```bash
+curl -sL --max-time 15 -H "User-Agent: Mozilla/5.0" "https://{brand}.com/products.json?limit=250"
+```
+
+**What you get per product:**
+| Field | Meaning |
+|-------|---------|
+| `title` | Product name |
+| `variants[].price` | Price in USD (string, e.g. "19.00") |
+| `variants[].compare_at_price` | Original/comparison price (null = no discount) |
+| `variants[].sku` | SKU for inventory tracking |
+| `variants[].available` | In-stock status |
+| `images[].src` | Product image URLs |
+
+**Pricing note:** Shopify `products.json` returns prices in **cents** as integers if you read from the page HTML (e.g., `1900` = $19.00), but as **decimal strings** from the JSON endpoint (e.g., `"19.00"`). The JSON endpoint is cleaner — divide by 100 if you're scraping from HTML `price` attributes.
+
+**Example result parsing:**
+```python
+import json, urllib.request
+req = urllib.request.Request('https://biodance.com/products.json?limit=250',
+    headers={'User-Agent': 'Mozilla/5.0'})
+resp = urllib.request.urlopen(req, timeout=15)
+products = json.loads(resp.read())['products']
+for p in products:
+    for v in p['variants']:
+        print(f"${v['price']} | {p['title']} | SKU: {v['sku']}")
+```
+
+**Pitfall:** The `products.json` endpoint may time out on SSL handshake from this Docker environment for some Shopify stores (intermittent — works on first request, fails on retry). If it times out, retry once with `timeout=30`; if it still fails, fall back to scraping the collection page HTML for price patterns.
+
 #### Phase 3: Multi-Platform Cross-Reference
 
 Check these platforms for brand presence (treat timeouts gracefully — use curl, not browser, when possible):
@@ -490,6 +542,8 @@ Deliver a structured Chinese report with:
 
 ### Pitfalls
 
+- **Amazon blocks ALL automated requests**: Amazon.com returns CAPTCHA/block pages for curl, urllib, AND Hermes browser — not just curl. Do not waste time trying to scrape Amazon product listings programmatically from this environment. Provide direct search URLs for the user to self-verify. See references/ecommerce-brand-research-example.md for fallback strategy.
+- **International Bing (`www.bing.com`) works via Python `urllib` with desktop User-Agent**, not just cn.bing.com with mobile UA. When English results are needed, use `www.bing.com` with standard desktop `Mozilla/5.0 (Windows NT 10.0; Win64; x64)` User-Agent — this returns richer English results than cn.bing.com.
 - **Amazon currency trap**: When delivery address is outside US, Amazon shows prices in local currency. A search from China shows ¥108.24 CNY (~$15 USD), but a US-based search would show `$14.99`. State the estimated USD price alongside any CNY data.
 - **Amazon autocorrects brand names**: When search returns "Showing results for X" vs "Search instead for Y", always try both spellings.
 - **Low ratings count doesn't mean bad product**: <100 reviews = statistically insignificant data. A 4.5⭐ with 3 ratings means nothing.
