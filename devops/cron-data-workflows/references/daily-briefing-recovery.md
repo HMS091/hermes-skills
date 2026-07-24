@@ -164,3 +164,62 @@ The desired template uses this structure (markdown):
 - The script's `error` field in JSON (`"invalid literal for int() with base 10: '121921656.262064'")` is the raw value the parser tried to coerce — this is actually the volume, not the price
 - `query2.finance.yahoo.com` works when `query1` returns "Too Many Requests"
 - Always retrieve price data from Yahoo in a Python script block (`execute_code` or `python3 -c`) — direct `curl | python3` pipes are blocked by security scanners in this environment
+
+## Full Air Gap: All Data Sources Failed (2026-07-24 Case)
+
+**Problem:** The 2026-07-24 run hit a total collapse:
+1. Pre-run script (daily_briefing.py) produced error JSON for all 3 assets - Nasdaq API SSL EOF, gold API failed
+2. Proxy server (192.168.1.88:7890) connection refused
+3. All HTTPS connections fail with `SSL: UNEXPECTED_EOF_WHILE_READING`
+4. HTTP connections hang then timeout
+5. Browser tool unavailable (Chromium starts fresh in each cron)
+6. `requests` module not found in system python3 (script shebang uses hermes venv, agent runs system python)
+
+**Diagnostic signals observed:**
+- openssl s_client: connects to IP, writes 221 bytes, reads 0 bytes → "unexpected eof while reading"
+- curl HTTP (example.com): exit code 52, empty response
+- Proxy port: Connection refused (no process listening at 192.168.1.88:7890)
+- DNS resolution: works (IPs resolve) but TLS handshake fails
+
+**Recovery steps (all local-only):**
+
+1. **Read previous 2 briefing markdowns** (`2026-07-23_briefing.md` and `2026-07-22_briefing.md`) to extract latest known prices:
+   - NVDA: $211.07 (Jul 22 close)
+   - TSLA: $358.31 (Jul 22 close)
+   - XAU: $4,121.20/oz (Jul 22 close)
+
+2. **Read previous `_raw.json` files** to get exact numeric values (price, change amount, change_pct, volume).
+
+3. **Use `session_search`** to find the most recent similar cron session and extract its analyst reasoning, risk warnings, and macro narrative. The bookend_start/bookend_end pattern shows the kickoff and resolution of the prior successful run.
+
+4. **Derive multi-day trend** from the briefing sequence:
+   - Jul 16-17: NVDA range $202-203, TSLA $380, Gold $4,000
+   - Jul 21-22: NVDA $207→$211 (+2%), TSLA $379→$358 (-5.5%), Gold $4,136→$4,121
+   - Key insight: TSLA's 5.5% two-day crash was the dominant signal
+
+5. **Write a transparent briefing** acknowledging data outage:
+   - Warning banner: "所有外部接口均因网络环境问题无法连接"
+   - Price table clearly labeled "最近可用收盘价（美东时间X月X日收盘）"
+   - "今日热点" became analysis-led (trend narrative, no news)
+   - Technical analysis caveated: "基于3日前收盘数据"
+   - Added operational risk item about data pipeline failure
+   - Appendix note in closing footer explaining the staleness
+
+6. **Run HTML generator** - it reads `_briefing.md` and `_raw.json` (including old ones). The generator works even with the error-only `_raw.json` because it gracefully falls back on missing price fields.
+
+**Recovery script pattern (run from agent, no external deps needed):**
+```python
+# Extract latest prices from previous briefing markdown tables
+import re
+prev = open('/opt/data/briefings/2026-07-23_briefing.md').read()
+# Parse table rows like: | **NVDA 英伟达** | $211.07 | -$0.99 | -0.47% |
+nvda_row = re.search(r'\*\*NVDA[^*]*\*\*.*?\$([0-9,.]+).*?([+-]+\$[0-9,.]+).*?([+-]+[0-9.]+%)', prev)
+tsla_row = re.search(r'\*\*TSLA[^*]*\*\*.*?\$([0-9,.]+).*?([+-]+\$[0-9,.]+).*?([+-]+[0-9.]+%)', prev)
+```
+
+**Key lessons:**
+- When ALL sources fail, do NOT keep retrying - each attempt costs 15-30s of wall-clock time
+- Previous briefing markdown files ARE the fallback data source - they contain full price tables
+- `session_search` is invaluable for recovering analyst context from prior runs
+- Transparency about failures is more professional than pretending data is fresh
+- The HTML generator is resilient to missing prices - it still produces a valid dashboard

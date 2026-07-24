@@ -348,7 +348,41 @@ When the connectivity probe returns `000` — no internet access at all — the 
 
 **Golden rule:** Price action + trend comparison + carried-forward macro context produces a credible briefing. Do NOT fabricate news headlines — if no news is available, write "无新增重大消息" rather than guessing.
 
-### News Gathering Priority for Cron Briefings
+#### Full Collapse: Script Also Failed (No Current Raw Data)
+
+When **both** the connectivity probe returns `000` AND the pre-run script produced only error JSON (all APIs failed), the local data landscape shrinks further:
+
+| Available | Not Available |
+|-----------|---------------|
+| Current run's error `{script_output}` | Current-day `_raw.json` |
+| Previous days' `_briefing.md` files | Current-day price data |
+| Previous days' `_raw.json` files | All external sources |
+| Previous cron session transcripts (via `session_search`) | Any current-day news |
+
+**Recovery workflow:**
+
+1. **Read the previous 2-3 `_briefing.md` files** to reconstruct the latest known prices and trends. The briefing markdown contains the full price table — parse the "行情概览" table to get NVDA/TSLA/XAU prices, changes, and percentages.
+
+2. **Also read the previous `_raw.json`** — it has the raw numeric data (price, change_pct, volume) that the markdown table may not fully reproduce. Cross-reference with the briefing markdown to confirm the values.
+
+3. **Use `session_search` to recover context** from the most recent successful cron session. Extract: the "今日热点" analysis (carry forward with updated price comparisons), the "技术面简析" support/resistance levels, and the "风险提示" warnings.
+
+4. **Compute multi-day trend vector** from the sequence of previous briefing prices. This is the most valuable insight when no new data exists — e.g., "NVDA 过去5日: $202.81 → $207.29 → $211.07 → 今日数据暂缺" exposes whether the trend was accelerating or stalling when we last had data.
+
+5. **Document the outage transparently** with a prominent warning banner immediately after the timestamp line. The banner should state which source failed, what data is being used instead, and its staleness in days.
+
+6. **Carry forward ALL key context** from the previous briefing — geopolitics (Iran, Ukraine), macro (Fed rate expectations, DXY), sector themes (AI capex cycle, EV competition). These don't change daily.
+
+7. **Include a "连接故障" entry in risk提示** as an operational risk item — the data pipeline itself is broken, which is a distinct risk from market movements.
+
+**Output characteristics for a full-collapse briefing:**
+- Price table uses the **last available close** date, clearly labeled
+- "今日热点" is **analysis-led** (trend narrative, not news-driven): `NVDA 上周连续3日站上210，$200底部确认有效，短期反弹结构完整`
+- Technical analysis carries forward unchanged, with a caveat: `MACD金叉形态维持，RSI 52中性，但以上均基于3日前收盘数据`
+- Risk warnings are repeated from the previous briefing with appropriate caveats
+- An operational risk item about the data pipeline failure is always added
+
+Do NOT fabricate current prices or pretend the data is fresh when it isn't. Transparency about the failure builds trust.
 
 When producing daily briefings in a cron environment, gather news in this priority order:
 

@@ -1382,3 +1382,77 @@ See `references/financial-data-sources.md` for full API list, RSS query template
 - **gold-api.com price** updates every ~30 seconds — OK for spot checks, not real-time trading.
 - **DXY price** is harder to find from a free API — MarketWatch page has it in JSON data. Try: ``curl -sL "https://www.marketwatch.com/investing/index/dxy" | grep -oP '"price":\s*"?"?([0-9.]+)' | head -1``
 
+### 🔴 Complete TLS/Network Failure Fallback (when EVERY HTTPS source fails)
+
+In some subagent environments, **all HTTPS connections** fail with `SSL: UNEXPECTED_EOF_WHILE_READING` — including gold-api.com, NASDAQ API, CNBC, and every search engine. Even port-80 HTTP connections silently drop. This is not a search-engine-block issue; it is a fundamental TLS/network failure (middlebox, firewall, or broken SSL stack). None of the normal fallback chains work.
+
+**Diagnose the failure type** (distinguish DNS hijacking from TLS stack failure):
+
+```python
+import socket
+# 1. Check DNS -- hijacked IPs signal DNS poisoning
+for host in ["www.google.com", "api.nasdaq.com", "api.gold-api.com"]:
+    ips = socket.getaddrinfo(host, 443, socket.AF_INET, socket.SOCK_STREAM)
+    print(f"{host} -> {ips[0][4][0]}")
+# Google -> 69.171.235.22 = hijacked (should be 142.250.x.x)
+
+# 2. Check known-good IPs for TCP reachability
+for ip in ["142.250.80.4", "142.250.80.14"]:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(3)
+    result = sock.connect_ex((ip, 443))
+    print(f"TCP {ip}:443 -> {'OPEN' if result == 0 else 'CLOSED'}")
+    sock.close()
+# TCP open + TLS fail = middlebox/firewall blocking TLS handshake
+
+# 3. Check s_client for where TLS fails
+echo "" | openssl s_client -connect 142.250.80.4:443 -tls1_2 2>&1
+# "SSL handshake has read 0 bytes and written 221 bytes" = ClientHello sent, no ServerHello
+```
+
+**When all network sources fail, recover from local data:**
+
+1. **Local daily briefing files at `/opt/data/briefings/`** -- this environment has a cron-based briefing system storing raw JSON market data:
+   - `<date>_raw.json` -- NVDA, TSLA, gold prices, changes, volumes, news headlines
+   - `<date>_preview.txt` -- human-readable plaintext preview
+   - `<date>_briefing.md` -- full AI-generated Chinese analysis
+   - `dashboard.html` -- HTML index of all briefings
+
+   ```bash
+   ls -t /opt/data/briefings/*_raw.json | head -5
+   ```
+
+2. **Read raw JSON for confirmed prices:**
+   ```python
+   import json
+   with open("/opt/data/briefings/2026-07-23_raw.json") as f:
+       data = json.load(f)
+   nvda = data["nvda"]   # {price, change, change_pct, volume, timestamp}
+   tsla = data["tsla"]
+   gold = data["gold"]   # {price, unit, currency}
+   ```
+
+3. **session_search for price context from past briefings:** When raw data also failed, session history from daily briefing cron jobs contains comprehensive price data, news summaries, and technical analysis. Search for "daily-briefing" sessions:
+   ```
+   session_search(query="daily-briefing NVDA TSLA gold", limit=3)
+   ```
+
+4. **Read the collection script** at `/opt/data/scripts/daily_briefing.py` -- it documents the exact APIs used (api.nasdaq.com, api.gold-api.com, finviz.com, yahoo finance RSS) and the proxy config (http://192.168.1.88:7890).
+
+5. **Run the collection script as a last resort:** Even if it fails, it logs the attempt and updates local files:
+   ```
+   /opt/hermes/.venv/bin/python /opt/data/scripts/daily_briefing.py 2>&1
+   ```
+
+6. **Build trend from multi-day historical data.** When today's live data is unavailable, past raw JSON files establish a clear multi-day trend. Report honestly: "Data collection failed due to [error]. Most recent confirmed data: X on {date}. Multi-day trend: Y."
+
+**Never fabricate today's price** by extrapolating from yesterday's data. Provide the last known prices from the most recent successful raw JSON file, clearly labeled with their date.
+
+**Double-check the Hermes venv** at `/opt/hermes/.venv/` -- it has `requests` and `certifi` installed. Try unsetting `SSL_CERT_FILE` in case the system cert bundle is stale:
+```bash
+unset SSL_CERT_FILE
+/opt/hermes/.venv/bin/python -c "import requests; r = requests.get('https://api.gold-api.com/price/XAU', verify=False, timeout=10); print(r.json())"
+```
+
+**Reference file:** See `references/complete-network-failure-fallback.md` for full diagnostic commands, daily briefing directory structure, and session-search recovery patterns with a worked example.
+

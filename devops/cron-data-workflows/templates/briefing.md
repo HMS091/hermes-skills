@@ -51,6 +51,20 @@
 
 *免责声明：本简报仅供参考，不构成投资建议。投资有风险，入市需谨慎。*
 
+### Data-Outage Banner Pattern (Full Collapse)
+
+Use when all data sources failed - pre-run script errors + zero network connectivity. Place immediately after the timestamp line:
+
+```
+> ⚠️ **数据采集故障说明**：今日所有外部接口（Nasdaq API、黄金API、新闻源）均因网络环境问题无法连接。以下价格为最近可用收盘价（美东时间{date}周{day}收盘）。建议参考昨日趋势线进行判断。如网络持续故障，建议检查代理服务器连通性和SSL/TLS环境配置。
+```
+
+And in the closing footer:
+
+```
+*⚠️ 本简报基于{date}（周{day}）收盘数据。因网络环境故障，今日实时数据采集失败，已使用最近可用数据。恢复后请参考最新行情。*
+```
+
 ### Zero-News Briefing Pattern (When All External Sources Blocked)
 
 Use when ALL web news sources return 0 bytes — Google News RSS, Yahoo, CNBC, Reuters, etc. all fail silently despite internet connectivity.
