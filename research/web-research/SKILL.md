@@ -1342,6 +1342,8 @@ When the user asks to research financial markets — commodities (gold, oil), fo
    - Silver: `https://api.gold-api.com/price/XAG`
    - Confirmed working, no rate limit observed.
 
+   ⚠️ **Network failure path**: If the above API calls fail with SSL/timeout errors, DO NOT keep retrying. Jump directly to the **Complete TLS/Network Failure Fallback** section below and its dedicated reference `references/complete-network-failure-fallback.md`. The local briefing archive at `/opt/data/briefings/` contains raw JSON price data and full macro analysis for the past 60+ days. Read both `_raw.json` (prices) and `_briefing.md` (macro context) files in parallel.
+
 2. **Search financial news via Google News RSS** (reliable fallback when DuckDuckGo/Google/Bing all blocked):
    ```bash
    curl -sL "https://news.google.com/rss/search?q=gold+price+XAU+2026&hl=en-US&gl=US&ceid=US:en" \

@@ -59,13 +59,13 @@ echo "" | openssl s_client -connect 142.250.80.4:443 -tls1_2 2>&1 | grep -E "SSL
 ls -la /opt/data/briefings/
 ```
 
-Expected contents (stale dates but available):
-- `YYYY-MM-DD_raw.json` — raw market data
+Expected contents:
+- `YYYY-MM-DD_raw.json` — raw market data (may show errors if network was down)
 - `YYYY-MM-DD_preview.txt` — plaintext preview
-- `YYYY-MM-DD_briefing.md` — full AI-generated analysis
+- `YYYY-MM-DD_briefing.md` — full AI-generated analysis with macro context (content may be stale but still useful)
 - `dashboard.html` — HTML index
 
-### Step 2: Parse the latest raw JSON
+### Step 2: Parse the latest raw JSON for confirmed prices
 
 ```python
 import json, os, glob
@@ -101,6 +101,51 @@ if raw_files:
                     print(f"  Found good data in {os.path.basename(f)}")
                     break
 ```
+
+### Step 2b (Critical): Cross-reference briefing .md files for macro context
+
+When raw JSON files show errors for MULTIPLE consecutive days (prolonged network outage), the `.md` briefing files are your richest source. They contain:
+- **Price tables** in markdown (the last successful close embedded in prose, even when collection failed)
+- **Multi-day trend narrative** with specific dates and directional analysis
+- **Macro factor analysis** (geopolitics, Fed/DXY, central bank buying, earnings season)
+- **Technical levels** (support/resistance, RSI, MACD)
+- **Risk assessments** with probability levels
+
+**Pattern**: Read 3-5 most recent briefing files in parallel to reconstruct the full picture:
+
+```python
+import os, glob, re
+
+briefings_dir = "/opt/data/briefings"
+md_files = sorted(glob.glob(os.path.join(briefings_dir, "*_briefing.md")))
+latest_mds = md_files[-5:]  # last 5 days
+
+for f in latest_mds:
+    with open(f) as fh:
+        text = fh.read()
+    
+    date_match = re.search(r'— (\d{4}-\d{2}-\d{2})', text)
+    date = date_match.group(1) if date_match else os.path.basename(f)
+    
+    # Extract price table (the markdown table near the top)
+    price_table = re.search(r'\|\s*\*\*XAU.*?\*\*\s*\|\s*\$?([0-9,]+\.?\d*).*?\n', text, re.MULTILINE)
+    if price_table:
+        print(f"[{date}] Gold: ${price_table.group(1)}/oz")
+    
+    # Extract macro signals
+    for kw in ['降息预期', 'DXY', '美元指数', '地缘', 'Fed', '央行购金', 'technical']:
+        context_lines = [l.strip() for l in text.split('\n') if kw.lower() in l.lower()]
+        if context_lines:
+            print(f"  Macro: {context_lines[0][:150]}")
+```
+
+**Key insight from worked session (Jul 24-25, 2026):** When network has been dead for 3+ consecutive days:
+1. The most recent successful raw JSON file is the last price anchor
+2. The briefing .md files produced on subsequent days still reference that price in their analysis (the briefing script uses the last known data when collection fails)
+3. Cross-day briefing comparison reveals the **trend direction** and **key drivers** even though today's live price is unknown
+4. Example: briefings from Jul 22 (Tue close: $4,136), Jul 23 (Wed close: $4,121), Jul 24 (Fri: uses same $4,121) — the macro analysis on Jul 24 is still valuable because it discusses the multi-day context
+
+**Always read both raw JSON and briefing MD files.** The JSON gives exact prices; the MD gives the macro narrative. Neither alone is sufficient.
 
 ### Step 3: Recover via session_search
 
