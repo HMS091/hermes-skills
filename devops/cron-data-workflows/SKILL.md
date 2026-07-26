@@ -327,13 +327,47 @@ curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 https://www.google.co
 - Every external call will time out (typically 15-60s each), wasting tool calls and wall-clock time
 - Proceed directly to the **Total Air Gap Fallback** pattern below
 
+### Curl Exit Code Diagnostics (Finer-Grained Than HTTP Code)
+
+The connectivity probe may return `000` *http_code* but different exit codes, revealing *why* the network is blocked. Run the probe in verbose mode to distinguish failure modes:
+
+```bash
+# Diagnostic — run after standard probe returns 000
+curl -v --max-time 10 https://www.google.com 2>&1 | tail -5
+```
+
+| Exit Code | HTTP Code | Typical `curl -v` Signal | Diagnosis | Action |
+|-----------|-----------|--------------------------|-----------|--------|
+| `35` | `000` | `TLS connect error: error:0A000126:SSL routines::unexpected eof while reading` | **SSL-layer blocking.** DNS resolves, TCP connects, but server closes TLS handshake immediately (0 bytes received). OpenSSL error `0A000126`. Ping (ICMP) may succeed. | Treat as full network isolation. All HTTPS to every host will fail identically. Do NOT retry with different TLS versions, ciphers, or `--no-alpn` — none of these bypass the block. |
+| `28` | `000` | `Connection timed out after X seconds` | **TCP-layer blocking or total outage.** DNS may resolve (or also time out). | Same as above — full network isolation. |
+| `7` | `000` | `Failed to connect to` | **DNS failure or host unreachable.** DNS lookup failed or network has no route. | Same as above. |
+| `6` | `000` | `Could not resolve host` | **DNS failure.** DNS server unreachable or blocking. | Same as above. Also try a numeric IP to confirm DNS vs. TCP. |
+
+**Key insight — exit 35 is distinct and identifiable:** When `ping 8.8.8.8` succeeds (200ms response confirmed) but every HTTPS curl returns exit 35 with `UNEXPECTED_EOF_WHILE_READING`, the network layer is alive (ICMP) but TLS traffic is being intercepted/dropped — likely by a transparent proxy, DPI firewall, or container egress filter that does not complete TLS negotiation. This is NOT fixable by changing curl flags, TLS versions, or User-Agent strings. Proceed immediately to **Total Air Gap Fallback** — do not waste time retrying different hosts or protocols.
+
+**Confirm with `openssl s_client`:** When curl exit 35 is ambiguous (e.g., you see both exit 35 and exit codes for other hosts), run openssl s_client to confirm the TLS layer is dead:
+```bash
+openssl s_client -connect query1.finance.yahoo.com:443 -servername query1.finance.yahoo.com < /dev/null 2>&1 | head -10
+```
+Expected signal when TLS is blocked:
+```
+SSL handshake has read **0 bytes** and written 1573 bytes
+Verification: OK
+New, (NONE), Cipher is (NONE)
+```
+The `read 0 bytes` line is the diagnostic: DNS resolved, TCP connected, but the server sent zero TLS handshake bytes before closing. This confirms an intermediary is intercepting and dropping the TLS connection without completing the handshake — no amount of client-side TLS configuration will fix it.
+
+**Dual-stack timing cost:**
+When DNS resolves with both AAAA (IPv6) and A (IPv4) records, `curl` tries IPv6 first. IPv6 fails instantly ("Network is unreachable"), then curl falls back to IPv4 and hangs for `--connect-timeout` seconds. Each curl call takes **10-15s** even with `--connect-timeout 5` because of this dual-stack fallback. If the probe itself takes >8s to return, treat the result as `000` immediately.
+
 **Diagnostic signals of total network isolation (what to look for):**
 
 | Tool | Symptom | Duration | Signal |
 |------|---------|----------|--------|
 | `curl` to Google | DNS resolves (both A/AAAA), IPv6 fails instantly ("Network is unreachable"), IPv4 hangs | 10-15s per curl | exit code 28 (timeout) |
 | `curl` to news APIs | Empty stdout, exit code 0 (silent failure) | ~15s per curl | No error message — looks like success but returns 0 bytes |
-| `browser_navigate` to Google | 120s timeout, `{"success": false, "error": "Command timed out after 120 seconds"}` | 120s | Distinct "browser daemon starting" or "timed out" error |
+| `browser_navigate` to any URL | 120s timeout, `{"success":false,"error":"Command timed out after 120 seconds"}` | 120s | Distinct "browser daemon starting" or "timed out" error |
+| `browser_navigate` (Chromium not installed) | 60s timeout, `{"success":false,"error":"Command timed out after 60 seconds\nThe browser daemon may still be starting or Chromium may be missing. Pull the latest image: ..."}` | 60s | Chromium/puppeteer not installed in container. Browser never starts. |
 | `browser_navigate` to Yahoo | Redirects through Google, loads Google "took too long to respond" page | 10-30s | Page title or body shows `"www.google.com took too long to respond"` — **not** a Yahoo consent wall or Yahoo content |
 
 **Key diagnostic insight:** If `browser_navigate` to Yahoo shows a Google timeout error page (not a Yahoo error page), it means the browser's **proxy/DNS resolution is broken at the system level**, not that Yahoo is blocking you. The browser is being redirected through Google's infrastructure and failing there. This is a smoking gun for total network isolation — stop all web attempts immediately.
@@ -501,10 +535,11 @@ Cron jobs operate under stricter security policies than interactive sessions:
 
 | Restriction | Impact | Workaround |
 |-------------|--------|------------|
-| `execute_code` blocked | Cannot run Python for API requests | Use two-step curl: `curl -s -o /tmp/file URL` then separate read |
+| `execute_code` blocked | Cannot run Python with tool access<br>Error: `BLOCKED: execute_code runs arbitrary local Python (including subprocess calls that bypass shell-string approval checks). Cron jobs run without a user present to approve it.` | Use two-step curl: `curl -s -o /tmp/file URL` then separate read |
 | `curl \| python3` pipes blocked | Pipe-to-interpreter flagged HIGH risk | Never pipe curl to python3; write to file first |
 | `delegate_task` web subagents | Return empty tool traces | Use browser or curl-friendly HTML sources |
 | Only memory/skill tools for modification | Cannot patch files or call terminal from agent code | All edits go through the `skill_manage` tool |
+| `read_file` denied in skill-update context | Error: `Background review denied non-whitelisted tool: read_file` | Can only use `skill_manage` and `memory` tools when reviewing a session for skill updates |
 
 The two-step curl approach that bypasses security blocks:
 ```bash
@@ -726,6 +761,7 @@ Save it at `/opt/data/briefings/{date}_raw.json` **before** running `generate_br
 - **Proxy-dependent scripts**: If the script uses a proxy that's intermittently down (e.g., Clash on NAS: `192.168.1.88:7890`), use the **Proxy Auto-Fallback pattern** (see Build Patterns above) rather than hard-failing. The `_request()` wrapper tries proxy first and falls back to direct on ConnectionError. This is more robust than checking proxy health upfront because the proxy might come back between the health check and the actual request.
 
 - **Security scanner blocks raw IPv4 addresses in inline commands**: The TIRITH security scanner's `raw_ip_url` rule blocks ANY terminal command whose arguments contain a raw IPv4 address — even if the IP is inside a Python string or a curl `-x` flag. This includes `curl -x http://192.168.1.88:7890`, `proxies={'http': 'http://192.168.1.88:7890'}` inside a `-c` Python script, and any shell one-liner referencing a LAN IP. The scanner pattern matches the `.168.1.88` octet sequence, so any `192.168.x.x` private IP triggers it. **Workaround**: Put proxy configuration inside a **saved script file** via `write_file`, then execute via `terminal("python3 /path/to/script.py")`. Raw-IP proxy URLs work fine inside saved Python files — only inline commands in terminal() arguments are blocked. (Discovered Jul 2026 session: all proxy-based data collection attempts blocked by this rule until the proxy config was placed in a saved Python script.)
+- **Security scanner blocks plain HTTP URLs (`tirith:plain_http_to_sink`)**: In addition to the `raw_ip_url` rule, the scanner has a separate rule that blocks ANY terminal command containing a plain `http://` URL (not HTTPS) — even when the URL is harmless (e.g., `http://google.com` for a connectivity test, `http://finance.yahoo.com/...` for data). This rule fires independently of `raw_ip_url` and catches cases where you try HTTP as a fallback after HTTPS fails. **No workaround** — plain HTTP URLs in terminal() arguments are always blocked in this cron environment. If HTTPS fails, do not retry with HTTP. Proceed directly to **Total Air Gap Fallback**.
 - **`deliver: "all"` with no connected channels**: Results in "no delivery target resolved". Check the job's `deliver` field against the current channel configuration. "all" fans out to every connected channel — if none are connected, delivery fails silently.
 - **`hermes update` is interactive, not cron-safe**: The `hermes update` command prompts the user for confirmation and may try to relaunch the CLI session. This hangs indefinitely in a cron context. Always use `uv tool upgrade hermes-agent` for cron-based Hermes self-updates — it's fully non-interactive and designed for scripted environments.
 - **`{script_output}` leaked into final output**: If the script failed, `{script_output}` may appear literally in the prompt. Don't propagate it — either strip it or replace with a clear error message.
