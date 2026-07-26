@@ -227,6 +227,128 @@ npm i -g <package> --noproxy '*'
 apt-get install -y -qq librsvg2-bin
 ```
 
+## Tool Lifecycle Management (Post-Install)
+
+After installing any tool (pip / npm / git / apt), systematize tracking and updates so tools don't drift.
+
+### Step 1: Check Version Control Coverage
+
+```bash
+cd /path/to/install && git rev-parse --git-dir 2>/dev/null \
+  && echo "IN GIT" || echo "NOT IN GIT"
+```
+
+**Coverage matrix (Hermes Docker environment):**
+
+| Location | Auto-synced? | Mechanism |
+|----------|-------------|-----------|
+| `/opt/data/skills/` | ✅ Yes | `skills-sync.sh` (hourly → GitHub) |
+| `/opt/hermes/` | ❌ Not a git repo | Manual clone from upstream |
+| `~/.understand-anything/repo/` | ❌ Upstream only | `git pull` on update |
+| pip packages | ❌ No | Track via weekly-update.sh |
+| npm packages | ❌ No | Track via weekly-update.sh |
+
+### Step 2: Update the Tools Manifest
+
+`/opt/data/skills/manifests/tools-manifest.json` is the single source of truth. It's inside `/opt/data/skills/` so it auto-syncs to `HMS091/hermes-skills`:
+
+```json
+{
+  "last_updated": "YYYY-MM-DD",
+  "tools": [
+    {
+      "name": "Tool Name",
+      "type": "pip | npm | git | uv | apt",
+      "version_check": "command to check version",
+      "update_cmd": "command to update",
+      "notes": "purpose or special notes"
+    }
+  ]
+}
+```
+
+### Step 3: Integrate into Update Script
+
+Edit `/opt/data/scripts/weekly-update.sh`:
+
+- **pip packages**: Add to the `PACKAGES` array
+- **git repos**: Add a dedicated section using git fetch + rev-parse:
+
+```bash
+# Pattern: git-based tool in weekly-update.sh
+echo "--- [N/4] <Tool Name> 检查 ---"
+if [ -d "$HOME/.<tool-dir>/repo" ]; then
+    cd "$HOME/.<tool-dir>/repo"
+    git fetch origin main 2>/dev/null
+    LOCAL=$(git rev-parse HEAD)
+    REMOTE=$(git rev-parse origin/main 2>/dev/null)
+    if [ "$LOCAL" != "$REMOTE" ] && [ -n "$REMOTE" ]; then
+        git pull origin main 2>&1 | tail -3
+        REPORT+="✅ <Tool Name>: 已更新\\n"
+    else
+        REPORT+="✅ <Tool Name>: 已是最新\\n"
+    fi
+    cd /opt/data
+fi
+```
+Update the section counter in all echo lines after adding.
+
+### Step 4: Verify Cron Job Chain
+
+```bash
+cronjob action=list
+```
+
+Check for:
+- `weekly-update.sh` — weekly, covers all tools
+- `skills-sync.sh` — hourly, syncs skills to GitHub
+- Hermes self-update — weekly, updates hermes-agent via uv
+- Git-based tool sections — integrated into weekly-update.sh
+
+## Hermes Plugin / Skill Installation (git-based)
+
+Some tools install as Hermes plugins via `curl | bash`, cloning a repo and symlinking skills. Example: Understand Anything (Egonex-AI/Understand-Anything, 76K⭐, MIT, codebase→knowledge graph).
+
+### Installation
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/OWNER/REPO/main/install.sh | bash -s hermes
+```
+
+### What Happens
+
+1. Clone to `~/.understand-anything/repo/`
+2. Symlink into `~/.hermes/skills/`:
+   `~/.hermes/skills/understand-anything → ~/.understand-anything/repo/understand-anything-plugin/skills`
+3. Exposes sub-skills (understand, understand-chat, understand-dashboard, etc.)
+
+### Verification
+
+```bash
+ls -la ~/.hermes/skills/
+ls ~/.understand-anything/repo/
+ls ~/.hermes/skills/understand-anything/
+```
+
+### Post-Install: Restart Required
+
+Run `/reset` or `/reload-skills` in the TUI, or restart hermes.
+
+### Update
+
+```bash
+cd ~/.understand-anything/repo && git pull origin main
+# Or if installer supports --update:
+bash install.sh --update
+```
+
+### Pitfalls
+
+- **Symlink, not copy** — deleting the repo breaks skills
+- **Not in pip/npm** — track via tools-manifest.json
+- **HEAD always moves** — `git pull` gives latest, no pinning
+- **Re-running install may fail** — symlink already exists
+
 ## Skill-Capability Mapping
 
 | Skill Category | Depends On | Installed Via |

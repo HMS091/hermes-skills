@@ -1,0 +1,50 @@
+{
+  "last_updated": "2026-07-26",
+  "tools": [
+    {
+      "name": "Hermes Agent",
+      "type": "pip (uv tool)",
+      "version_check": "uv tool list | grep hermes-agent",
+      "update_cmd": "uv tool upgrade hermes-agent",
+      "notes": "Auto-updated every Sunday via cron (hermes-self-update.sh)"
+    },
+    {
+      "name": "Scrapling",
+      "type": "pip",
+      "version_check": "pip show scrapling | grep Version",
+      "notes": "Web scraping - Fetcher/Stealthy/Dynamic/Spider"
+    },
+    {
+      "name": "MinerU (magic-pdf)",
+      "type": "pip",
+      "version_check": "pip show magic-pdf | grep Version",
+      "notes": "PDF/document parsing"
+    },
+    {
+      "name": "PaddleOCR",
+      "type": "pip",
+      "version_check": "pip show paddleocr | grep Version",
+      "notes": "OCR text extraction"
+    },
+    {
+      "name": "faster-whisper",
+      "type": "pip",
+      "version_check": "pip show faster-whisper | grep Version",
+      "notes": "Speech-to-text (CPU)"
+    },
+    {
+      "name": "WhisperX",
+      "type": "pip",
+      "version_check": "pip show whisperx | grep Version",
+      "notes": "Speech-to-text with diarization"
+    },
+    {
+      "name": "Understand Anything",
+      "type": "git (skill plugin)",
+      "repo": "https://github.com/Egonex-AI/Understand-Anything",
+      "location": "~/.understand-anything/repo",
+      "update_cmd": "cd ~/.understand-anything/repo && git pull",
+      "notes": "Codebase → interactive knowledge graph. Installed for Hermes via install.sh -s hermes"
+    }
+  ]
+}
