@@ -194,7 +194,18 @@ When data comes from the **last trading day before a weekend** but the briefing 
 
 4. **Gold section should lead with geopolitics** on Monday briefings — weekend geopolitical developments directly impact gold's Monday open and can override prior Friday's technical setup.
 
-#### Extended Gap Pattern (Thursday close → Sunday briefing)
+#### Extended Gap: Deep Staleness (Wednesday Close → Monday Briefing)
+
+When stock data shows **Wednesday's close** but the briefing is generated on **Monday** (the longest weekend gap — 5 days / 3 trading sessions stale):
+
+- **Prominence of the stale-data banner is critical.** After 5 days without fresh data, the warning moves from a blockquote to the header area immediately after the timestamp. Frame it as: "第N天数据中断 — 最后已知价格为X月X日（周X）收盘，此后已错过N个完整交易日。"
+- **The briefing shifts from "analysis" to "preview" mode** — the main content is not what happened (you don't know), but what's coming (earnings, FOMC, economic data). The "weekly outlook" framing replaces the "market recap" framing. This was demonstrated in the Jul 27, 2026 session where the entire briefing repositioned as "财报超级周" preview with each weekday's catalysts listed.
+- **Tech giant earnings calendar becomes the central narrative.** When data is 5 days stale and the week ahead has Microsoft, Meta, Apple, Amazon, and FOMC packed into 4 days, the earnings calendar IS the briefing. Structure the main sections around each earnings report's expected impact on the stale asset rather than around price action.
+- **Reuse the previous briefing's risk warnings verbatim** (they haven't changed — you have no data to update them). Add one new risk item: "数据采集连续中断第N天" as an operational risk, with the specific outage count and a description of the root cause (SSL/TLS connection failure, specific error code).
+- **Do not fabricate or guess price movement** for the missing trading sessions. Use conditional language: "若周四/周五..." and "$X若守不住则..." throughout. The entire technical analysis section should be prefixed with "（基于X月X日数据 + 逻辑推演）".
+- **Macro section focuses on the coming week's calendar** rather than current conditions (which you cannot see). List each day's events with their expected asset impact.
+
+#### Extended Gap: Thursday Close → Sunday Briefing
 
 When stock data shows **Thursday's close** but the briefing is generated on **Sunday** (or later), the staleness is more severe than a standard weekend bridge:
 
@@ -339,6 +350,7 @@ curl -v --max-time 10 https://www.google.com 2>&1 | tail -5
 | Exit Code | HTTP Code | Typical `curl -v` Signal | Diagnosis | Action |
 |-----------|-----------|--------------------------|-----------|--------|
 | `35` | `000` | `TLS connect error: error:0A000126:SSL routines::unexpected eof while reading` | **SSL-layer blocking.** DNS resolves, TCP connects, but server closes TLS handshake immediately (0 bytes received). OpenSSL error `0A000126`. Ping (ICMP) may succeed. | Treat as full network isolation. All HTTPS to every host will fail identically. Do NOT retry with different TLS versions, ciphers, or `--no-alpn` — none of these bypass the block. |
+| `0` (⚠️ false negative) | `000` (empty stdout) | **Silent failure.** `curl` without a `User-Agent` header may swallow the SSL error and return exit code 0 with empty stdout — a false positive "success" that looks like the command ran fine. | If curl returns exit 0 with empty output but the URL should return data, re-run with `-H "User-Agent: Mozilla/5.0"`. Exit 0 + empty output with no UA header is a strong indicator of the same exit-35 SSL-layer blocking — the UA header causes curl to send a slightly different ClientHello that triggers the visible error exit. |
 | `28` | `000` | `Connection timed out after X seconds` | **TCP-layer blocking or total outage.** DNS may resolve (or also time out). | Same as above — full network isolation. |
 | `7` | `000` | `Failed to connect to` | **DNS failure or host unreachable.** DNS lookup failed or network has no route. | Same as above. |
 | `6` | `000` | `Could not resolve host` | **DNS failure.** DNS server unreachable or blocking. | Same as above. Also try a numeric IP to confirm DNS vs. TCP. |
@@ -357,6 +369,13 @@ New, (NONE), Cipher is (NONE)
 ```
 The `read 0 bytes` line is the diagnostic: DNS resolved, TCP connected, but the server sent zero TLS handshake bytes before closing. This confirms an intermediary is intercepting and dropping the TLS connection without completing the handshake — no amount of client-side TLS configuration will fix it.
 
+**Version diagnostic — check OpenSSL and curl versions early:** When TLS fails at the handshake level, run `curl -V | head -2` to capture the curl/OpenSSL version triplet. This is a single-shot diagnostic that costs ~1s and tells you whether the failure is in a known-problematic version combination. Example from a confirmed-blocked environment:
+```
+curl 8.14.1 (x86_64-pc-linux-gnu) libcurl/8.14.1 OpenSSL/3.5.6 zlib/1.3.1 ...
+Release-Date: 2025-06-04, security patched: 8.14.1-2+deb13u4
+```
+If `OpenSSL/3.5.6` is paired with kernel 4.x (check via `uname -r`), note the version mismatch as an additional data point — OpenSSL 3.5+ dropped TLS 1.0/1.1 and uses stricter cipher negotiation that older TLS terminations may reject.
+
 **Dual-stack timing cost:**
 When DNS resolves with both AAAA (IPv6) and A (IPv4) records, `curl` tries IPv6 first. IPv6 fails instantly ("Network is unreachable"), then curl falls back to IPv4 and hangs for `--connect-timeout` seconds. Each curl call takes **10-15s** even with `--connect-timeout 5` because of this dual-stack fallback. If the probe itself takes >8s to return, treat the result as `000` immediately.
 
@@ -369,6 +388,7 @@ When DNS resolves with both AAAA (IPv6) and A (IPv4) records, `curl` tries IPv6 
 | `browser_navigate` to any URL | 120s timeout, `{"success":false,"error":"Command timed out after 120 seconds"}` | 120s | Distinct "browser daemon starting" or "timed out" error |
 | `browser_navigate` (Chromium not installed) | 60s timeout, `{"success":false,"error":"Command timed out after 60 seconds\nThe browser daemon may still be starting or Chromium may be missing. Pull the latest image: ..."}` | 60s | Chromium/puppeteer not installed in container. Browser never starts. |
 | `browser_navigate` to Yahoo | Redirects through Google, loads Google "took too long to respond" page | 10-30s | Page title or body shows `"www.google.com took too long to respond"` — **not** a Yahoo consent wall or Yahoo content |
+| `browser_navigate` to any HTTPS URL | `{\"success\":false,\"error\":\"Navigation failed: net::ERR_CONNECTION_CLOSED\"}` | Immediate | Chromium cannot even initiate the TLS handshake — distinct from the 60s timeout. Net result: total network isolation. |
 
 **Key diagnostic insight:** If `browser_navigate` to Yahoo shows a Google timeout error page (not a Yahoo error page), it means the browser's **proxy/DNS resolution is broken at the system level**, not that Yahoo is blocking you. The browser is being redirected through Google's infrastructure and failing there. This is a smoking gun for total network isolation — stop all web attempts immediately.
 
