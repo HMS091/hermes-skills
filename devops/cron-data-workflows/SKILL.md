@@ -533,6 +533,45 @@ Use the sequential approach when briefing size or reliability requirements make 
 
 Do NOT fabricate current prices or pretend the data is fresh when it isn't. Transparency about the failure builds trust.
 
+#### Staleness Threshold: When to Write an Honest Null Report Instead of Using Stale Data
+
+The Full Collapse workflow above assumes previous briefing/raw data exists and can be carried forward. But there is a **staleness threshold** beyond which repurposing old data becomes misleading rather than useful:
+
+| Staleness | Action | Rationale |
+|-----------|--------|-----------|
+| 1-3 trading days (weekend bridge) | **Carry forward** — use previous data with stale-data disclaimer | Weekend cliff known to readers; Monday open will reconcile |
+| 4-14 days (one missing week) | **Carry forward** — add stronger disclaimer, shift from "analysis" to "preview" mode | Data is old but still directionally valid for trend structure |
+| **2-6 weeks** | **Carry forward is borderline** — depends on market volatility during the gap. If a major event (FOMC, earnings) occurred in the gap, switch to null report. | Old support/resistance levels may have been blown through. Macro context may be completely different post-FOMC/earnings. |
+| **6+ weeks** | **Write an honest null report** — do NOT reuse old data | Any price action from 6+ weeks ago is irrelevant to current positioning. Old analysis may mislead. The system failure itself is the story. |
+
+**The Honest Null Report Pattern (for 6+ weeks staleness or environment-level failure):**
+
+When the data pipeline has been broken for so long that no prior briefing is useful, AND the system-level connectivity failure has been diagnosed (SSL/TLS broke), the correct output is a **system-status briefing**, not a market-analysis briefing:
+
+```
+Structure:
+1. Header + timestamp (always include)
+2. ✅ Artifacts saved (raw JSON, briefing file, HTML dashboard) — what the cron job DID do
+3. ❌ Error report — what failed, with specific error codes and affected data sources
+4. 🔍 Diagnosis — the root cause with technical evidence (curl exit codes, openssl output)
+5. 🔧 Suggested fixes — actionable steps the operator can take
+6. ⚠️ Disclaimer — clear statement that this report contains no actionable market data
+```
+
+Key principles:
+- **The system failure IS the content.** Do not write "NVDA price unavailable — let me guess" — write "All HTTPS connections fail with SSL EOF. Here are the curl diagnostics and exit codes."
+- **Save all diagnostic artifacts.** Save the error JSON to `_raw.json`. Save the honest null report to `_briefing.md`. Run the HTML generator (it still works for historical briefings).
+- **List what DID work.** The raw JSON was saved. The HTML dashboard regenerated successfully. Previous 40+ briefings are still accessible. This prevents the impression of total system collapse.
+- **Do NOT include analyst speculation or "if the market was open" hypotheticals.** If you have no data, your report should be about the system, not the market.
+- **Document the exact version triplet** (`curl -V | head -2`, `uname -r`, `openssl version`) when TLS failures occur — this helps the operator identify known-problematic combinations (e.g., OpenSSL 3.5+ on kernel 4.x).
+
+This pattern was exercised in a Jul 2026 cron session: the last successful data was 5+ weeks old (Jun 23), and the network-level TLS failure was confirmed via curl exit 35 with `SSL: UNEXPECTED_EOF_WHILE_READING` on every HTTPS endpoint. The resulting briefing documented the system failure, the diagnostic steps taken, and actionable fixes — no fabricated market data or stale analysis was presented.
+
+**When to use the null report vs. the normal Full Collapse pattern:**
+- If previous data is **6+ weeks stale** → null report
+- If previous data is **fresh enough** but script failed → Full Collapse (use previous data)
+- If the **script producing error JSON AND the environment is clearly broken** (curl exit 35 on every host, not just financial APIs) → null report
+
 When producing daily briefings in a cron environment, gather news in this priority order:
 
 1. **`market_news` from pre-run JSON** — already collected by the data-collection script, no restrictions (fastest, zero network cost)
