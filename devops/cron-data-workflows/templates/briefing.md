@@ -65,6 +65,63 @@ And in the closing footer:
 *⚠️ 本简报基于{date}（周{day}）收盘数据。因网络环境故障，今日实时数据采集失败，已使用最近可用数据。恢复后请参考最新行情。*
 ```
 
+### Persistent-Outage Escalation Banner (7+ Consecutive Days)
+
+Use when the same infrastructure-level failure has persisted for 7+ consecutive days. The report shifts from "analysis with caveats" to "system-status bulletin":
+
+**Header — replaces the price table header line:**
+```
+📡 数据采集时间: {collection_time}
+
+> ⚠️ **数据采集连续第{N}天失败 — 本简报不完整**
+>
+> 所有外部数据源持续无法连接，详细诊断见"风险提示"部分。
+> **最近一次有效数据：{last_good_date}（{staleness_days}天前）** — 以下引用数据已严重滞后，不反映当前市场状况。
+
+## 📊 三大标的行情概览
+
+| 标的 | 现价 | 涨跌 | 涨跌幅 |
+|------|------|------|--------|
+| **NVDA 英伟达** | ❌ 数据不可用 | - | - |
+| **TSLA 特斯拉** | ❌ 数据不可用 | - | - |
+| **XAU 黄金** | ❌ 数据不可用 | - | - |
+```
+
+**今日热点 — becomes analysis-led, not news-driven:**
+```
+## 🔥 今日热点 — 基于历史存档数据（滞后，非当前交易参考）
+
+由于数据采集系统连续{N}天中断，以下内容引用已存档前几期简报中的核心信息。
+
+### 🖥️ 英伟达
+1. **趋势回顾（基于上次有效数据）** — 关键价格走势和核心叙事，标注数据日期
+2. 持续的基本面因素
+
+### 🚗 特斯拉
+...
+
+### 🥇 黄金
+...
+```
+
+**Risk section — operational risk becomes primary:**
+```
+## ⚠️ 风险提示与系统状态
+
+1. **⚠️ 系统故障 — 网络层连续{N}天不可用**：SSL 握手在所有 HTTPS 连接上意外中断。需排查执行环境的网络防火墙、代理配置或SSL证书问题。
+2. **⚠️ 数据缺失**：本日无任何市场数据。简报中的历史数据已过时{X}天，不反映当前市场状况。
+3. **⚠️ 交易警示**：本简报不包含任何有效的当前市场数据，请勿依据本报告进行任何交易决策。
+4. **建议措施**：
+   - 检查执行环境的网络连接和 SSL 证书
+   - 联系平台运维确认网络策略变更
+   - 考虑增加HTTP备用数据源或本地缓存回退机制
+```
+
+**Footer:**
+```
+*简报自动生成 | 系统状态: ❌ 数据采集失败 — 网络不可达（连续{N}天）*
+```
+
 ### Zero-News Briefing Pattern (When All External Sources Blocked)
 
 Use when ALL web news sources return 0 bytes — Google News RSS, Yahoo, CNBC, Reuters, etc. all fail silently despite internet connectivity.

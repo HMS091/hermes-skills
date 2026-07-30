@@ -544,6 +544,37 @@ The Full Collapse workflow above assumes previous briefing/raw data exists and c
 | **2-6 weeks** | **Carry forward is borderline** — depends on market volatility during the gap. If a major event (FOMC, earnings) occurred in the gap, switch to null report. | Old support/resistance levels may have been blown through. Macro context may be completely different post-FOMC/earnings. |
 | **6+ weeks** | **Write an honest null report** — do NOT reuse old data | Any price action from 6+ weeks ago is irrelevant to current positioning. Old analysis may mislead. The system failure itself is the story. |
 
+#### Persistent Outage Escalation: 7+ Consecutive Days of Data Pipeline Failure
+
+When the data pipeline has been broken for **7 or more consecutive days** with the same root cause (confirmed infrastructure-level TLS failure, not just a data-source API outage), the briefing structure must escalate:
+
+| Day | Action | Warning Prominence |
+|-----|--------|-------------------|
+| 1–3 | Normal Full Collapse — carry forward, add disclaimer | Blockquote after timestamp |
+| 4–6 | Stronger disclaimer, shift toward "infrastructure status" framing | Blockquote + footnote in header |
+| **7+** | **Escalate to the same level as the "Honest Null Report" — the system failure IS the content** | **Warning banner above the price table, infrastructure diagnosis section, and `⚠️ 连续第X天` counter in the header line itself** |
+
+**Trigger condition for early escalation (before 7 days):** If the root cause is a *confirmed infrastructure-level TLS failure* (curl exit 35 with `SSL: UNEXPECTED_EOF_WHILE_READING` on every HTTPS host, including non-financial ones like google.com), the escalation to infrastructure-diagnostics framing may happen earlier than day 7 — day 4 or 5 if the cause has been narrowed to an environment-level block that no client-side change can fix. The distinction: a data-source outage (API key expired, NASDAQ API down) is a "normal outage" that may resolve. An environment-level TLS block (SSL handshake fails on every HTTPS target for 5+ days) is an infrastructure failure that requires operator intervention and should be documented as such.
+
+**What changes at 7+ days:**
+
+1. **Warning prominence escalates** — The stale-data banner moves from a blockquote to a **distinct warning line above the price table**, with a `⚠️ 连续第X天` counter placed in the header line (between the timestamp and the price table). The banner gets a prominent symbol or color indicator.
+2. **Infrastructure diagnosis becomes the primary content** — Instead of a "briefing with caveats," the report becomes a **system-status bulletin** that documents the outage duration, the error signatures, and the affected endpoints. The system failure IS the content.
+3. **Previous data is no longer the anchor** — After 7+ days, even a "carry forward with strong disclaimer" briefing is misleading because the market may have had significant moves. The report should NOT present the last known prices as meaningful data — they go in a small footnote, not the main price table.
+4. **Fixes and recommendations grow more urgent** — By day 7+, the "建议措施" list should include specific diagnostic commands the operator can run (`openssl s_client`, `curl -v`, `uname -r`) and suggested escalation contacts (platform team, container host admin).
+5. **The report structure flips** — The old order was: price data → analysis → risks. The new order at 7+ days: **system status → error diagnosis → suggested fixes → risks → (footnote: last known prices)**. This signals to the operator that actionable system work is needed, not market analysis.
+6. **Include a "历史对比·为何今日不同" sub-section** that explains explicitly: "上一份包含完整数据的简报发布于 X月X日（N天前），此后系统连续N天未能采集任何新数据。本报告无法提供任何当前市场分析。" This prevents the operator from thinking the lack of data is a one-off glitch.
+7. **The closing footer changes** — Instead of the standard `*简报自动生成*` footer, use: `*系统状态报告 | ❌ 数据采集连续中断第X天 | 上次完整数据: YYYY-MM-DD*`. This makes the outage duration immediately visible in the HTML dashboard preview.
+
+**Concrete example (2026-07-30 session):** 7 consecutive days of TLS failures (Jul 24–30). The last successful data was Jul 22 (close prices: NVDA $211.07, TSLA $358.31, Gold $4,121). The resulting briefing:
+- Had no price table with actual prices — used `❌ 数据不可用` for all three assets
+- Used a prominent `⚠️ 数据采集连续第7天失败` banner directly above the price table
+- Shifted the "今日热点" section to carry-forward-only with explicit staleness labels (过时8天)
+- Changed the closing footer to: `*简报自动生成 | 系统状态: ❌ 数据采集失败 — 网络不可达（连续7天）*`
+- Listed specific diagnostic steps (openssl s_client, check SSL certs, contact platform team)
+
+This is an evolution of the **Honest Null Report Pattern** — the same principles (system failure IS the content, no fabricated data, save diagnostic artifacts), but triggered earlier (7+ days instead of 6+ weeks) when the root cause is a *confirmed environment-level infrastructure block* that will not self-resolve.
+
 **The Honest Null Report Pattern (for 6+ weeks staleness or environment-level failure):**
 
 When the data pipeline has been broken for so long that no prior briefing is useful, AND the system-level connectivity failure has been diagnosed (SSL/TLS broke), the correct output is a **system-status briefing**, not a market-analysis briefing:
