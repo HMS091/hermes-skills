@@ -1,7 +1,7 @@
 ---
 name: web-research
 description: "Web research for SaaS/platform/service alternatives AND deep-dive forum/community crawling — find, compare, and evaluate online services, products, and community knowledge. Covers search engine fallback strategies in restricted environments, proxy-based searching, forum registration/crawling (NodeBB/Discourse/XenForo), Bilibili scraping, cross-region price comparison, and commercial clone-script research."
-trigger: "User asks to find alternative websites, platforms, or services matching specific criteria — any 'find me X like Y' task. Also: user asks to research a private company's user numbers, revenue, or financial data (corporate/company research); user asks to investigate or validate a specific website/service; user asks to 'go learn from' or 'research on' a specific forum or community; user asks for hardware/software comparison where community knowledge is primary source; user asks to find contact info for a Chinese content creator on Bilibili. ALSO: user asks to research a publicly traded stock/equity (news, analyst ratings, competitor moves, product announcements, earnings) — falls under the Financial Market Research section."
+trigger: "User asks to find alternative websites, platforms, or services matching specific criteria — any 'find me X like Y' task. Also: user asks to research a private company's user numbers, revenue, or financial data (corporate/company research); user asks to investigate or validate a specific website/service; user asks whether a specific app/tool/software is safe, trustworthy, or worth adopting (open-source tool security/reputation audit); user asks to 'go learn from' or 'research on' a specific forum or community; user asks for hardware/software comparison where community knowledge is primary source; user asks to find contact info for a Chinese content creator on Bilibili. ALSO: user asks to research a publicly traded stock/equity (news, analyst ratings, competitor moves, product announcements, earnings) — falls under the Financial Market Research section."
 ---
 
 # Web Research: Service/Platform Comparison
@@ -1015,6 +1015,41 @@ See `references/business-company-research.md` for full workflow, curl commands f
 - `references/commercial-clone-script-research.md` — White-label/clone script product research: pricing patterns, vendor landscape, evaluation criteria for commercial SaaS clone products
 - `references/business-company-research.md` — Multi-source triangulation for company/product/service launch research: DuckDuckGo Lite bypass, press release JSON extraction, source cross-referencing, structured report generation
 - `references/wikipedia-research-proxy.md` — Using Wikipedia as a proxy for blocked primary sources: REST API vs MediaWiki API, citation mining, security scanner workarounds, and data triangulation when Forbes/Statista/GVR are behind Cloudflare
+
+---
+
+## Special Application: Open-Source Tool Trust & Security Audit (开源工具安全评估)
+
+When the user asks "is tool X trustworthy/safe?" or "what do users say about X?" before adopting an app/CLI/GitHub project — especially security-sensitive tools (eSIM writers, wallets, credential managers, card tools). Deliver a verdict + evidence, not a description.
+
+### Workflow
+
+1. **Identify the real project**: GitHub API search for the exact name (users typo/spell variants — search both spellings). Record: stars, forks, license, created/pushed dates, homepage, open issues. Check for a v1 predecessor repo (name without suffix) — its age/stars/history is part of the track record.
+2. **Author & entity due diligence**: user profile (account age, followers, location), release cadence (check `releases` API — frequent releases = active), contributors. If a company name appears (App Store seller, LICENSE copyright), look it up. **Estonian `OÜ` suffix = e-Residency company** — usually a solo founder's EU legal wrapper, not a big org; verify via DDG `<name> OÜ inforegister.ee` (inforegister.ee/digibaas.ee/ariregister.rik.ee give reg number, legal rep name, owned domains). Check stores: App Store iTunes lookup API (`itunes.apple.com/lookup?id=...` → sellerName = legal entity), Google Play (see pitfall below for rating extraction).
+3. **Clone & code-audit** (the core — clone both repos with `git clone --depth 1`):
+   - AndroidManifest permissions vs. app function (BLE tools need BLUETOOTH + location; anything beyond = flag)
+   - Telemetry SDKs in deps: `grep -rniE 'analytics|firebase|sentry|amplitude|mixpanel|posthog|telemetry' lib/`
+   - All network endpoints: `grep -rnoE 'https?://[a-zA-Z0-9._/-]+' lib/ src/` — then **classify every endpoint**: official API / project's own server / third-party / CDN. Project-owned servers get a closer look.
+   - Hardcoded secrets: `grep -rniE '(api[_-]?key|secret|private[_-]?key|BEGIN RSA)'` (exclude keystore/key.properties noise)
+   - **Data-collection toggles: check DEFAULT values** (`?? true` / `?? false` in settings code). An opt-OUT telemetry feature is materially different from opt-in — report the default explicitly.
+   - Signing keys committed to repo (e.g. `community.jks`): check build.gradle.kts — often a deliberate public "community build" key with password in source; official store builds use private keys. Not a vuln, but verify.
+   - TLS handling: `badCertificateCallback => true` / `NSAllowsArbitraryLoads` overrides = MITM-vulnerable; report severity honestly (protocol-layer signing may mitigate).
+   - Update mechanism: fetch the update manifest URL — verify it returns version metadata + signature hashes pointing at official releases, NOT an executable payload.
+4. **Community feedback**:
+   - GitHub issues API (`/repos/{o}/{r}/issues?state=all&per_page=50&sort=created&direction=desc`) returns issues AND PRs (PRs carry `pull_request` key) in one call — states/labels/comments reveal dev responsiveness and whether reported bugs got fixed.
+   - Hardware-vendor endorsements: DDG `<tool> site:<vendor-domain>` or the vendor's software/download page — an official "the LPA we recommend" is the strongest trust signal in niche hardware ecosystems.
+   - Reddit blocks datacenter IPs (see pitfalls) — use DDG `site:reddit.com` and read snippets.
+   - Check both English AND Chinese/Japanese community surfaces (mineo.jp, 奶昔-style forums, x.com posts surface via DDG snippets).
+5. **Report format** (Chinese, tables, honest negatives): 结论先行 verdict → 是什么 (table) → 可信度证据 (table) → 代码审查 (✅ clean table + ⚠️ findings with severity) → 用户反馈 (positive / negative / "no security complaints found") → 风险清单 → 使用建议 (incl. which settings to turn off) → 数据来源.
+
+See `references/open-source-tool-security-audit.md` for the full worked example (NekokoLPA2 eSIM tool, 2026-08).
+
+### Pitfalls (this domain)
+- **Reddit blocks datacenter/cloud IPs**: `search.rss` → 403, `old.reddit.com` → "File a ticket" block page, `search.json` → HTML. Do NOT burn time retrying. Fallback: DDG `site:reddit.com <tool>` and use snippet text as the evidence (label it as snippet-level).
+- **Google Play rating**: page is ~1MB but the aggregate rating IS in embedded JSON — regex `"ratingValue"\s*:\s*"?([\d.]+)"?`. Description + data-safety section are server-rendered (mobile UA helps). Play blocked the Hermes browser too; curl + regex is the reliable path.
+- **Scratch scripts**: `write_file` is restricted to HERMES_WRITE_SAFE_ROOT (/opt/data) — write helper .py files under `/opt/data/`, never /tmp. And never pass Python with nested quotes via `python -c` through a shell string (f-string quotes get mangled) — always write the script to a file first.
+- **GitHub API unauthenticated rate limit (~60/hr/IP)** can die mid-investigation after ~6 batched calls. Mitigate: batch API calls into ONE execute_code block, and use `until=<date>`/`per_page` params to scope. On rate-limit hit: fetch HTML pages with curl instead, or retry after other work.
+- **Changelog/commit archaeology**: date-scope commits with `curl ".../commits?until=2026-02-15T00:00:00Z"` to find when a repo was actually open-sourced vs. when it was created (a project can launch closed-source then open later — worth reporting).
 
 ---
 
