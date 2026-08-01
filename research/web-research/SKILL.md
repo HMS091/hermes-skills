@@ -1053,6 +1053,18 @@ See `references/open-source-tool-security-audit.md` for the full worked example 
 
 ---
 
+## Special Application: Software/App Trust & Safety Vetting (软件可信度与安全评估)
+
+When the user asks whether a specific software/app/tool is trustworthy or safe **before using it** (eSIM writers, card readers, downloadables, any binary), or asks to verify a downloaded package. Three-track workflow — see `references/software-app-vetting.md` for full commands and the worked NekokoLPA2/EasyLPAC example.
+
+1. **Repo triage** (GitHub API): stars/license/created/pushed/archived + issues (bug patterns + dev responsiveness) + releases (cadence) + contributors (1-person vs community) + **earliest-commits query** to check the open-source timeline (some projects launch closed-source and open later — worth reporting)
+2. **Source audit** (shallow clone + `grep -r`): classify every hardcoded URL (CDN / update-check / telemetry / proxy / legit API); telemetry keywords (analytics|firebase|sentry|telemetry|amplitude|mixpanel); secrets; Android permissions vs app purpose; iOS ATS exceptions; in-repo signing keys (community.jks + password in build.gradle = intentional community flavor, NOT a leak); **default-on telemetry flags** (`?? true` fallbacks); curl the update manifest (should be plain version/signature JSON); `badCertificateCallback => true` = TLS accept-all weakness worth reporting even when protocol-layer crypto exists
+3. **Store identity**: iTunes lookup API → `sellerName` (reveals legal entity); Google Play via **mobile-UA curl** → parse `"ratingValue"`/`"reviewCount"` from HTML (desktop page times out); bundleId → developer portfolio across apps
+4. **Company identity**: DDG `"<NAME> OU|OÜ|LTD"` → inforegister.ee / ariregister.rik.ee (Estonia), dnb.com. `Sepapaja tn 6, Tallinn` = famous e-Residency virtual address — most small OÜs there are solo devs, not a scam signal per se
+5. **Community feedback**: GitHub issues ARE the primary channel for open-source tools; DDG for `"<tool>" reddit/telegram/评价`; hardware-vendor endorsements are top trust signals ("the LPA we recommend" on vendor site). Reddit is blocked from datacenter IPs (search.json→HTML, RSS 403, old.reddit→File a ticket) — use DDG snippets, don't retry
+6. **Binary release verification** (download trust): official digest from GitHub API `releases/tags/<tag>` asset `digest` field vs local `sha256sum` — MUST match; bundled engine binaries vs upstream official releases byte-for-byte; Authenticode via Python PE struct parse (security dir = data-dir index 4; unsigned is NORMAL for solo open-source); `strings` scan on exe (Go stdlib / GUI framework / legit CRL lists)
+7. **Verdict report**: 结论先行 + tables + honest risk list + usage advice, every datapoint labeled with source+date
+
 ## Forum Research & Community Crawling
 
 Deep-dive research into **technical forums** (NodeBB, Discourse, XenForo) for hardware/software comparison data, user profiling, and Chinese content platform scraping (Bilibili).
