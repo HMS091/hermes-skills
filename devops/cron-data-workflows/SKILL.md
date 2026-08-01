@@ -338,6 +338,22 @@ curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 https://www.google.co
 - Every external call will time out (typically 15-60s each), wasting tool calls and wall-clock time
 - Proceed directly to the **Total Air Gap Fallback** pattern below
 
+### Dual-Path Probe (Direct + Proxy in One Run)
+
+Run `scripts/net_probe.py` to test BOTH routes (direct and the LAN proxy) against 5 representative hosts (google, gold-api, Yahoo chart, Nasdaq API, CNBC RSS) in a single shot. It prints a verdict line that classifies the failure mode immediately:
+
+| Result pattern | Diagnosis | Next step |
+|---|---|---|
+| All direct FAIL `SSLError`, all proxy FAIL `ProxyError` | TLS egress block AND proxy host down (Connection refused) | Total Air Gap Fallback; flag proxy-host recovery as an operator action |
+| All direct FAIL `SSLError`, proxy routes OK | Proxy is the recovery path | Re-enable proxy usage; rerun collection via proxy |
+| Some hosts OK, some FAIL | Selective site blocking | Use working hosts / non-financial sources (NPR, Ars Technica) |
+| All OK | Network healthy | Normal news-gathering priority |
+
+Run it with the Hermes venv python — system python3 (PEP 668) has no `requests`:
+`/opt/hermes/.venv/bin/python scripts/net_probe.py [proxy_url]`. The proxy's raw IP lives inside the saved file (not an inline terminal arg), which also dodges the tirith `raw_ip_url` scanner rule.
+
+**daily_briefing.py fallback gap to remember:** its `_request()` wrapper falls back to direct only on `ProxyError`/`ConnectionError`. An `SSLError` through the proxy is NOT caught — so if the proxy is up but TLS is blocked through it, the script aborts without ever trying direct. If the probe shows `proxy/... SSLError` (not ProxyError), the proxy is up but TLS-blocked: that needs a code change in `_request()`, not a network fix. (Confirmed Aug 2026: probe showed all direct `SSLError` + all proxy `ProxyError` = TLS egress block AND proxy box off — two independent failures, both must be reported.)
+
 ### Curl Exit Code Diagnostics (Finer-Grained Than HTTP Code)
 
 The connectivity probe may return `000` *http_code* but different exit codes, revealing *why* the network is blocked. Run the probe in verbose mode to distinguish failure modes:
@@ -836,9 +852,11 @@ Save it at `/opt/data/briefings/{date}_raw.json` **before** running `generate_br
 - `references/curl-financial-sources.md` — Curl-friendly financial news sources for cron jobs: which sites work with plain curl (Google News RSS ★★★★★, CNBC RSS, MarketWatch stock pages), which are blocked (Cloudflare/JS walls), and the cron-mode security restrictions that make this necessary. Includes the Google News RSS extraction pattern (per-ticker search queries, clean XML, no Cloudflare) — the best per-ticker news source for cron jobs. Also includes the full extraction patterns, the preferred news-gathering priority order for cron briefings, and the old CSS-heavy HTML fallback.
 - `references/multi-day-trend-analysis.md` — Extracting multi-day trends from sequential _raw.json and _briefing.md files, used to enrich context when web research is unavailable. Covers trend-vector computation, cross-referencing previous risk warnings, and turning single-day snapshots into multi-day narratives.
 - `templates/briefing.md` — Full Chinese briefing template with writing guidelines. Copy and fill for daily briefings.
+- `scripts/net_probe.py` — Dual-path network probe (direct + proxy in one run, 5 representative hosts, verdict line). Classifies TLS egress block vs proxy-down vs selective blocking in seconds. Run with `/opt/hermes/.venv/bin/python scripts/net_probe.py [proxy_url]`. See **Dual-Path Probe** section.
 
 ## Common Pitfalls
 
+- **Previous briefing's "last known price" can cite data one day OLDER than the true last-good raw JSON**: During a multi-day outage, do not copy the price table from the previous briefing into the new one. Verify directly against the raw files — `grep -l '"price":' /opt/data/briefings/*_raw.json | sort | tail -1` finds the newest file containing actual prices; that is the true last-good collection. Observed Aug 2026: the 07-31 briefing claimed last-known data was 07-22 (NVDA $207.29 / TSLA $378.93 / XAU $4,136.10) while `2026-07-23_raw.json` actually held newer successful prices (NVDA $211.07 / TSLA $358.31 / XAU $4,121.20) — the previous session had anchored one day too early, mislabeling a Jul 21 close as the latest. Also state BOTH dates when citing prices: collection date (Beijing morning) vs the US close it displays (e.g., 07-23 collection shows Jul 22 US close). The outage-day counter anchors to collection dates, not closes.
 - **Total network isolation (curl returns `000`)**: Some cron environments have zero internet access. All curls (Google News RSS, CNBC, Nasdaq API) and browser calls will time out. Always probe with `curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 https://www.google.com` first. If it returns `000`, skip ALL external fetches and go straight to the **Total Air Gap Fallback** pattern (multi-day trend analysis + previous briefing context carryover). See the **Network Connectivity Check** section above for the IPv4/IPv6 dual-stack diagnostic pattern (curl may take 10-15s even with `--connect-timeout 5` due to IPv6→IPv4 fallback).
 - **Yahoo Finance consent wall blocks price extraction**: Yahoo redirects datacenter IPs to `consent.yahoo.com/v2/collectConsent` — the page shows only a privacy dialog, no prices. Check the snapshot title for "Ihre Datenschutzeinstellungen" or "consent.yahoo.com" in the URL. **Do not retry Yahoo** — switch to Reuters stock pages (`reuters.com/markets/companies/{TICKER}.OQ/`) which work without consent walls.
 - **Browser timeout after multiple navigations in one session**: When making 3+ sequential `browser_navigate` calls in a cron job, later calls may timeout at 60s. If you need data from multiple pages, **batch curls for APIs** (Nasdaq API, Yahoo Chart API) for price data and use the browser only for the primary page. Alternative: navigate back with `browser_back()` to avoid new session overhead, or prioritize one comprehensive source (Reuters Markets page) that shows multiple tickers' context at once.
