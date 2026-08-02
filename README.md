@@ -1,6 +1,6 @@
 # Hermes Agent 技能库同步
 
-这个仓库用来在多台设备之间同步 Hermes Agent 的技能（Skills）。
+这个仓库用来在多台设备之间同步 Hermes Agent 的技能（Skills），**仓库已公开**，任何 Agent / 设备都可以直接拉取使用。
 
 ## 本机（已配置好）
 
@@ -8,7 +8,17 @@
 - ✅ 技能目录：`/opt/data/skills/`
 - ✅ 自动忽略 Hermes 内部文件（`.hub/` `.curator_*` `.usage.json` 等）
 
-## 其他设备安装
+## 其他 Agent 直接使用（公开拉取）
+
+无需任何凭据，直接 clone：
+
+```bash
+git clone https://github.com/HMS091/hermes-skills.git /opt/data/synced-skills
+```
+
+其他 Hermes / Claude / 任意 Agent 机器把 `external_dirs` 指向该目录即可加载全部技能（见下方配置）。每小时 `git pull origin main` 即可保持同步。
+
+## 其他设备安装（写入权限方式）
 
 ### 方法一：SSH Key 方式（推荐）
 
