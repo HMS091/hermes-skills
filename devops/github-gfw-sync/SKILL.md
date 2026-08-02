@@ -229,6 +229,11 @@ curl ... | python3 -c "..."
 curl ... > /tmp/result.json && python3 -c "import json; d=json.load(open('/tmp/result.json')); ..."
 ```
 
+### 6. 瞬时 DNS 解析失败（Could not resolve host）
+
+push 时偶发 `fatal: unable to access ... Could not resolve host: github.com`，
+是 GFW/DNS 抖动而非配置错误。**直接重试通常立即成功**；连续失败才需要检查代理或换网络。
+
 ---
 
 ## 在多台设备间同步
