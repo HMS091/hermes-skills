@@ -128,6 +128,42 @@ for c in data:
 
 ---
 
+## 仓库可见性：私有 ↔ 公开（2026-08-02：hermes-skills 已改为 public）
+
+### 检查可见性
+
+```bash
+# 无 token 请求：200 = 公开可拉取，404 = 私有
+curl -s -o /dev/null -w "%{http_code}\n" "https://api.github.com/repos/HMS091/hermes-skills"
+# 带 token 看字段
+curl -s -H "Authorization: token $GH_BOT_TOKEN" "https://api.github.com/repos/HMS091/hermes-skills" \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print('private:', d['private'], '| visibility:', d['visibility'])"
+```
+
+### 改为公开（PATCH API，无需网页操作）
+
+```bash
+curl -s -X PATCH -H "Authorization: token $GH_BOT_TOKEN" \
+  -H "Accept: application/vnd.github+json" \
+  "https://api.github.com/repos/HMS091/hermes-skills" \
+  -d '{"visibility":"public"}' | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('private'), d.get('visibility'))"
+```
+
+### ⚠️ 公开前必须做的安全检查
+
+1. **扫描全仓库文件树**找敏感文件名（.env/token/secret/key/pem/password）：
+```bash
+curl -s -H "Authorization: token $GH_BOT_TOKEN" \
+  "https://api.github.com/repos/HMS091/hermes-skills/git/trees/main?recursive=1" \
+  | python3 -c "import json,sys,re; d=json.load(sys.stdin); paths=[t['path'] for t in d.get('tree',[])]; print([p for p in paths if re.search(r'\.env|token|secret|credential|\.pem|\.key|password', p, re.I)])"
+```
+2. **清理被 `git add -A` 误提交的内部临时文件**（如 `.bundled_manifest_*.tmp`）：`.gitignore` 里的 `.bundled_manifest` 不带通配符，匹配不到带后缀的 tmp 文件，会被 auto-sync 一起提交。用 `git rm --cached <file>` + 删除。
+3. **公开后立即用无 token 请求验证**返回 200。
+
+**现状：** hermes-skills 已是 public，其他 agent/设备无需任何凭据即可 `git clone https://github.com/HMS091/hermes-skills.git`。README.md 中已有公开拉取说明。
+
+---
+
 ## Pitfalls
 
 ### 1. 🚨 `|| echo "Push failed"` 导致静默失败
@@ -204,7 +240,10 @@ curl ... > /tmp/result.json && python3 -c "import json; d=json.load(open('/tmp/r
 ### 从设备（拉取方）
 
 ```bash
-# 克隆（带 token）
+# 克隆（公开仓库，无需任何凭据）
+git clone https://github.com/HMS091/hermes-skills.git /opt/data/synced-skills
+
+# 需要写权限（往上游 push）时用带 token 的 URL：
 git clone "https://HMS091:${GH_BOT_TOKEN}@github.com/HMS091/hermes-skills.git" \
   /opt/data/synced-skills
 
