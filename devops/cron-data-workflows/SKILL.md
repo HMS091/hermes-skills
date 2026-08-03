@@ -310,6 +310,34 @@ When all data APIs fail, the agent can still use the browser tool to navigate to
 
 > **⚠️ Price-validation check:** The pre-run data-collection script may erroneously report volume as price (the parser tries to coerce large numbers like 121921656 into stock prices). Always sanity-check: NVDA range ~$140-240, TSLA ~$280-500, gold ~$1500-5000. If a price looks like a volume number, fetch from Yahoo Finance API as enrichment.
 
+### China-Network Fallback: Domestic Financial APIs (GFW-style TLS Block)
+
+When EVERY Western financial host fails with `SSL: UNEXPECTED_EOF_WHILE_READING` (curl exit 35) or empty responses, but the environment is China-based (Beijing-time cron, Chinese-language pipeline), **do NOT conclude Total Air Gap** — probe a Chinese domestic endpoint first:
+
+```bash
+curl -s --max-time 10 "https://qt.gtimg.cn/q=usNVDA" | head -c 200   # Tencent finance — instant if reachable
+```
+
+If domestic endpoints answer while all Western ones TLS-fail, the box is behind a GFW-style egress filter and the **Chinese domestic API tier** is the recovery path — it returns FRESH data, not stale-carryover:
+
+| Source | Endpoint | Covers | Notes |
+|--------|----------|--------|-------|
+| 腾讯财经 Tencent | `https://qt.gtimg.cn/q=usNVDA` (`us` prefix for US stocks), `q=hf_XAU` for spot gold | NVDA/TSLA quotes, live gold | GBK encoded → `iconv -f GBK -t UTF-8`; no key, no Cloudflare, sub-second |
+| 新浪财经 Sina | `https://hq.sinajs.cn/list=gb_nvda` | Same quotes (cross-check) | REQUIRES `-H "Referer: https://finance.sina.com.cn"`; GBK |
+| 东方财富 Eastmoney | `https://search-api-web.eastmoney.com/search/jsonp?cb=cb&param={json}` | Chinese financial NEWS search | Replaces the entire Western RSS news ladder when blocked; returns jsonp — strip `cb(`/`)`; strip `<em>` tags from titles |
+
+**Tencent US quote field map** (`v_usNVDA="..."`, split on `~`): 1=中文名, 3=现价, 4=昨收, 5=今开, 6=成交量, 31=行情时间(美东), 32=涨跌额, 33=涨跌幅%, 34=当日最高, 35=当日最低, 42=市盈率, 46=总市值(亿), 49=52周高, 50=52周低.
+
+**Tencent spot gold** (`v_hf_XAU="..."`, comma-split): 0=现价, 1=涨跌幅%(**NOT** change amount — a common parsing trap), 2=买价, 3=卖价, 4=最高, 5=最低, 6=时间, 7=昨收, 8=今开, 13=日期. Compute 涨跌额 = 现价 − 昨收.
+
+**Sina US quote** (`var hq_str_gb_nvda="..."`, comma-split): 0=名称, 1=现价, 2=涨跌幅%, 3=时间, 4=涨跌额, 5=今开, 6=最高, 7=最低, 8=52周高, 9=52周低, 10=成交量.
+
+**Pipeline integration:** after recovering quotes, PATCH `{date}_raw.json` with `price`/`change`/`change_pct` (+ a `recovered_from` note) BEFORE running `generate_briefing_html.py` — the dashboard status cards read the latest `_raw.json` and otherwise show `N/A`. Verify after regeneration (e.g. `grep -c '200.75' dashboard.html`).
+
+**Quote freshness semantics:** US stock quotes from Tencent/Sina carry the last US close timestamp (e.g. `2026-07-31 16:00:01`) — that IS the correct close when the US market is shut (Beijing Monday morning = Sunday US). Gold `hf_XAU` is live 24/7 with Beijing time. Label both correctly in the briefing table.
+
+Full endpoint recipes, the Eastmoney search `param` JSON, and a worked example: `references/china-finance-data-apis.md`. Reusable news-search script: `scripts/em_news_search.py`.
+
 ## Browser-Based Data Extraction (Cron Job Fallback)
 
 When data-collection scripts fail AND subagent-based enrichment is unavailable (both common in cron environments), the **browser tool** is the most reliable fallback for fetching stock prices and news.
@@ -853,9 +881,13 @@ Save it at `/opt/data/briefings/{date}_raw.json` **before** running `generate_br
 - `references/multi-day-trend-analysis.md` — Extracting multi-day trends from sequential _raw.json and _briefing.md files, used to enrich context when web research is unavailable. Covers trend-vector computation, cross-referencing previous risk warnings, and turning single-day snapshots into multi-day narratives.
 - `templates/briefing.md` — Full Chinese briefing template with writing guidelines. Copy and fill for daily briefings.
 - `scripts/net_probe.py` — Dual-path network probe (direct + proxy in one run, 5 representative hosts, verdict line). Classifies TLS egress block vs proxy-down vs selective blocking in seconds. Run with `/opt/hermes/.venv/bin/python scripts/net_probe.py [proxy_url]`. See **Dual-Path Probe** section.
+- `references/china-finance-data-apis.md` — China-network recovery tier: Tencent (qt.gtimg.cn) US-stock + spot-gold quotes with field maps, Sina (hq.sinajs.cn, needs Referer) cross-check, and the Eastmoney search API for Chinese financial news when every Western news source is TLS-blocked. Includes the `hf_XAU` "field 1 is percent, not change amount" parsing trap and the worked 2026-08-03 recovery (fresh NVDA/TSLA/XAU data instead of stale carryover).
+- `scripts/em_news_search.py` — Eastmoney news search (urllib, no deps): `python3 em_news_search.py 特斯拉 黄金 英伟达`. Replaces the whole Western RSS news ladder on China-network boxes. See **China-Network Fallback** section.
 
 ## Common Pitfalls
 
+- **Western-only fallback ladder fails on China-network boxes: probe domestic APIs before declaring "Total Air Gap"**: When every Western financial endpoint (Nasdaq, Yahoo, stooq, gold-api) dies with `SSL: UNEXPECTED_EOF_WHILE_READING` / curl exit 35, the decision tree can route to Total Air Gap — WRONG if the box is in China. Chinese domestic endpoints (qt.gtimg.cn, hq.sinajs.cn, search-api-web.eastmoney.com) remain fully reachable and return FRESH data, and browser/lightpanda-search may also fail on foreign hosts. Always probe Tencent once (`curl -s --max-time 10 "https://qt.gtimg.cn/q=usNVDA"`) before falling back to stale local files. Confirmed Aug 2026: Nasdaq API + stooq + Yahoo + lightpanda search + browser all SSL-failed while Tencent/Sina quotes and Eastmoney news worked instantly, turning a would-be Full-Collapse run into a normal briefing with recovered data. See **China-Network Fallback** section and `references/china-finance-data-apis.md`.
+- **Tencent/Sina quote payloads are GBK-encoded**: `qt.gtimg.cn` and `hq.sinajs.cn` return GBK — Chinese names (英伟达/特斯拉) render as mojibake unless you pipe through `iconv -f GBK -t UTF-8`. Parse the numeric fields first or iconv the whole payload. Sina additionally rejects requests without `Referer: https://finance.sina.com.cn`.
 - **Previous briefing's "last known price" can cite data one day OLDER than the true last-good raw JSON**: During a multi-day outage, do not copy the price table from the previous briefing into the new one. Verify directly against the raw files — `grep -l '"price":' /opt/data/briefings/*_raw.json | sort | tail -1` finds the newest file containing actual prices; that is the true last-good collection. Observed Aug 2026: the 07-31 briefing claimed last-known data was 07-22 (NVDA $207.29 / TSLA $378.93 / XAU $4,136.10) while `2026-07-23_raw.json` actually held newer successful prices (NVDA $211.07 / TSLA $358.31 / XAU $4,121.20) — the previous session had anchored one day too early, mislabeling a Jul 21 close as the latest. Also state BOTH dates when citing prices: collection date (Beijing morning) vs the US close it displays (e.g., 07-23 collection shows Jul 22 US close). The outage-day counter anchors to collection dates, not closes.
 - **Total network isolation (curl returns `000`)**: Some cron environments have zero internet access. All curls (Google News RSS, CNBC, Nasdaq API) and browser calls will time out. Always probe with `curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 https://www.google.com` first. If it returns `000`, skip ALL external fetches and go straight to the **Total Air Gap Fallback** pattern (multi-day trend analysis + previous briefing context carryover). See the **Network Connectivity Check** section above for the IPv4/IPv6 dual-stack diagnostic pattern (curl may take 10-15s even with `--connect-timeout 5` due to IPv6→IPv4 fallback).
 - **Yahoo Finance consent wall blocks price extraction**: Yahoo redirects datacenter IPs to `consent.yahoo.com/v2/collectConsent` — the page shows only a privacy dialog, no prices. Check the snapshot title for "Ihre Datenschutzeinstellungen" or "consent.yahoo.com" in the URL. **Do not retry Yahoo** — switch to Reuters stock pages (`reuters.com/markets/companies/{TICKER}.OQ/`) which work without consent walls.
