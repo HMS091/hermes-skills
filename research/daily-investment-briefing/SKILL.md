@@ -38,8 +38,20 @@ investment briefing for NVDA / TSLA / gold (XAU) and embeds it into a self-conta
 - Cron final response = generation report: data table, key points per asset, output file paths,
   verification results.
 
+## Reliable price-history source (for real MAs / 涨跌幅)
+
+`GET https://api.nasdaq.com/api/quote/{SYM}/historical?assetclass=stocks&fromdate=2024-08-01&todate=YYYY-MM-DD&limit=600`
+with headers `User-Agent: Mozilla/5.0` + `Accept: application/json` works **direct (no proxy)** and returns
+`data.tradesTable.rows` (`date` MM/DD/YYYY, `close/high/low/open` with `$` and thousands separators,
+`volume`). Use it to (a) verify the nasdaq.com snapshot actually equals a real session close and
+(b) compute MA5/10/20/50/100/200, 52-week high/low, avg volume — far better than quoting stale levels.
+Note: stooq.com CSV is JS-challenged/blocked; don't bother. Note the quote-snapshot `timestamp` field can
+mislabel the session (e.g. shows "Sep 10" for the 9/11 close) — trust the historical API.
+
 ## Pitfalls
 
+- **Weekend runs**: when the cron fires on a Beijing Sunday = US Saturday, there is NO new session; the
+  snapshot repeats the prior briefing's close. Say so explicitly in 口径说明 rather than implying new data.
 - **Gold API & Yahoo direct connections fail** in this environment (SSL `UNEXPECTED_EOF_WHILE_READING`).
   Fall back to media-reported spot/COMEX gold prices found via the Eastmoney news (e.g. 伦敦现货/COMEX
   期货 quotes appear in the daily roundup articles) and mark them as 媒体口径.
@@ -48,6 +60,8 @@ investment briefing for NVDA / TSLA / gold (XAU) and embeds it into a self-conta
 - **Snapshot vs close discrepancy**: the nasdaq.com quote snapshot (e.g. 7:30 PM ET) can differ sharply
   from the reported session close (e.g. +0.11% vs +2.90%). Present the collected numbers in the table
   AND note the reported close in analysis.
+- **Gold has several conflicting 口径 on the same day** (gold-api spot snapshot, FX168 现货收盘, COMEX 期金
+  which can move the OPPOSITE way). List all of them in the disclosure; never silently pick one.
 - **News arrays in the raw JSON are usually empty** ("No recent news") — always do the web/API supplement.
 - Check `/opt/data/scripts/` for existing helper scripts before building new fetch logic — the
   environment already ships `fetch_news.py`, `generate_briefing_html.py`, `net_probe.py`.
