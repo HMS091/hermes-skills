@@ -1,50 +1,64 @@
 {
-  "last_updated": "2026-07-26",
+  "last_updated": "2026-09-14",
+  "notes": "人工/agent 核查后的工具清单。系统 python3 没有 pip，包都装在专用 venv 里 — 检测版本必须用对应 venv 的 python（importlib.metadata），用系统 pip show 会误报'未安装'。",
   "tools": [
     {
       "name": "Hermes Agent",
-      "type": "pip (uv tool)",
-      "version_check": "uv tool list | grep hermes-agent",
-      "update_cmd": "uv tool upgrade hermes-agent",
-      "notes": "Auto-updated every Sunday via cron (hermes-self-update.sh)"
+      "type": "docker + uv tool (两套并存)",
+      "installed_version": "v0.21.2 (2026.9.11) @ /opt/hermes",
+      "secondary": "v0.19.0 (uv tool, 即 PyPI 最新版)",
+      "version_check": "/opt/hermes/.venv/bin/hermes --version",
+      "update_cmd": "docker 镜像更新 (uv tool upgrade 只到 0.19.0, 已是 PyPI 最新)",
+      "notes": "每周日 08:00 由 cron hermes-self-update.sh 检查"
     },
     {
       "name": "Scrapling",
-      "type": "pip",
-      "version_check": "pip show scrapling | grep Version",
-      "notes": "Web scraping - Fetcher/Stealthy/Dynamic/Spider"
+      "type": "venv (uv 创建, 无 pip)",
+      "installed_version": "0.4.15",
+      "location": "/opt/data/scrapling-venv",
+      "python": "/opt/data/scrapling-venv/bin/python",
+      "deps": "curl_cffi, playwright 1.60, patchright, browserforge, msgspec (StealthyFetcher/DynamicFetcher 可导入)",
+      "version_check": "/opt/data/scrapling-venv/bin/python -c \"import importlib.metadata as m; print(m.version('scrapling'))\"",
+      "update_cmd": "/usr/local/bin/uv pip install --python /opt/data/scrapling-venv/bin/python -U scrapling",
+      "helper": "/opt/data/scripts/scrapling_helper.py (必须用 venv python 调用)",
+      "notes": "2026-09-14 实测 Fetcher.get 200 + CSS 解析正常；helper fetch 正常"
     },
     {
       "name": "MinerU (magic-pdf)",
       "type": "pip",
-      "version_check": "pip show magic-pdf | grep Version",
-      "notes": "PDF/document parsing"
+      "installed_version": null,
+      "version_check": "importlib.metadata.version('magic-pdf')",
+      "notes": "未安装 — 文档/PDF 解析，体积大且无 GPU"
     },
     {
       "name": "PaddleOCR",
       "type": "pip",
-      "version_check": "pip show paddleocr | grep Version",
-      "notes": "OCR text extraction"
+      "installed_version": null,
+      "version_check": "importlib.metadata.version('paddleocr')",
+      "notes": "未安装 — OCR，体积大；可选替代: 系统已有 OCR 技能链(tesseract/pymupdf)"
     },
     {
       "name": "faster-whisper",
       "type": "pip",
-      "version_check": "pip show faster-whisper | grep Version",
-      "notes": "Speech-to-text (CPU)"
+      "installed_version": null,
+      "version_check": "importlib.metadata.version('faster-whisper')",
+      "notes": "未安装 (仅 uv 缓存有 1.2.1 残留) — CPU 语音转写"
     },
     {
       "name": "WhisperX",
       "type": "pip",
-      "version_check": "pip show whisperx | grep Version",
-      "notes": "Speech-to-text with diarization"
+      "installed_version": null,
+      "version_check": "importlib.metadata.version('whisperx')",
+      "notes": "未安装 — 带说话人分离的转写"
     },
     {
       "name": "Understand Anything",
       "type": "git (skill plugin)",
       "repo": "https://github.com/Egonex-AI/Understand-Anything",
       "location": "~/.understand-anything/repo",
+      "installed_version": "v2.9.0-165-g6df3065 (2026-09-12)",
       "update_cmd": "cd ~/.understand-anything/repo && git pull",
-      "notes": "Codebase → interactive knowledge graph. Installed for Hermes via install.sh -s hermes"
+      "notes": "代码库 → 交互式知识图谱，symlink 到 ~/.hermes/skills/；每周一 03:00 由 weekly-update.sh 自动 pull"
     }
   ]
 }
