@@ -48,6 +48,30 @@ with headers `User-Agent: Mozilla/5.0` + `Accept: application/json` works **dire
 Note: stooq.com CSV is JS-challenged/blocked; don't bother. Note the quote-snapshot `timestamp` field can
 mislabel the session (e.g. shows "Sep 10" for the 9/11 close) — trust the historical API.
 
+## Snapshot `change_pct` is AFTER-HOURS, not the day change (critical)
+
+The raw-JSON quote snapshot (timestamp like `7:30 PM ET`) often arrives ~3.5h **after** the 4 PM close, so its
+`price`/`change`/`change_pct` describe the **after-hours move measured FROM that day's close** — not the
+session's gain/loss. Reading it as the day change inverts the story (a real -3.36% day showed as +0.62%).
+
+**Always reverse-engineer and verify the true close:**
+
+```
+prev_close  = historical-API close of the PRIOR session (e.g. Fri 9/11)
+true_close  = price - change            # exact, to the cent
+verify      = prev_close * (1 + media-reported %/100)  # must equal true_close
+```
+
+Worked example (2026-09-14): NVDA snapshot `price 212.2597, change +1.2997` → true close **210.96**;
+9/11 close 218.29 × (1 − 0.0336) = 210.96 ✓ (media: NVDA −3.36%). Same for TSLA: `359.7694 − 0.7994`
+= 358.97 = 365.44 × (1 − 0.0177) ✓ (media: −1.77%). When the two agree to the cent, you have the real
+session close with certainty. Report the **close** in the table, show the after-hours price in parentheses,
+and put the correction in 口径说明 — never let the script's number stand as the day change.
+
+Also note the historical API lags: right after a session it may still end at the previous day's row.
+Use `fromdate=<month start>&todate=<today>` and take `rows[0]`; if it is the prior session, derive the
+new close as above rather than reporting the stale row.
+
 ## Pitfalls
 
 - **Weekend runs**: when the cron fires on a Beijing Sunday = US Saturday, there is NO new session; the
