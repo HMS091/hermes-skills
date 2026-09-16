@@ -76,9 +76,10 @@ new close as above rather than reporting the stale row.
 
 - **Weekend runs**: when the cron fires on a Beijing Sunday = US Saturday, there is NO new session; the
   snapshot repeats the prior briefing's close. Say so explicitly in 口径说明 rather than implying new data.
-- **Gold API & Yahoo direct connections fail** in this environment (SSL `UNEXPECTED_EOF_WHILE_READING`).
-  Fall back to media-reported spot/COMEX gold prices found via the Eastmoney news (e.g. 伦敦现货/COMEX
-  期货 quotes appear in the daily roundup articles) and mark them as 媒体口径.
+- **Gold API & Yahoo direct connections fail** *usually* (SSL `UNEXPECTED_EOF_WHILE_READING`) — but
+  gold-api.com succeeds intermittently (2026-09-16 run returned a `XAU/USD` spot snapshot fine). Try it,
+  then ALWAYS cross-check against media 现货/COMEX numbers (e.g. 东方财富《国际金融要情》gives 现货,
+  COMEX 期金, 上金所 9999 and 黄金 T+D on one line) and disclose every 口径 used.
 - **Proxy** `http://192.168.1.88:7890` exists, but proxy commands can trigger pending-approval in cron
   mode (no user to approve) — avoid depending on it; Eastmoney API works direct.
 - **Snapshot vs close discrepancy**: the nasdaq.com quote snapshot (e.g. 7:30 PM ET) can differ sharply
@@ -92,5 +93,15 @@ new close as above rather than reporting the stale row.
 
 ## Support files
 
+- `generate_briefing_html.py` status cards: the snapshot `change/change_pct` made the dashboard's top cards
+  read **after-hours** values as the day change (opposite sign vs the briefing). Fixed 2026-09-16: cards now
+  show the derived close (`price - change`) as the headline value and label the move 盘后 explicitly. If you
+  edit that generator, keep that convention — never print a bare `change_pct` from the raw JSON.
 - `references/eastmoney-news-api.md` — Eastmoney search API mechanics + usage.
 - `templates/briefing_template.md` — the markdown briefing template (copy + fill).
+
+## Pitfall: the historical API can lag a full session
+
+On the 2026-09-16 run the Nasdaq historical API still ended at 09/14 rows even though the 9/15 session was
+closed and widely reported. Reverse-engineer the new close (`price - change`) and validate it against a media
+headline's % move before reporting; do NOT report the stale row as "today".
