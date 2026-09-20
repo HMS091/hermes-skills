@@ -76,6 +76,12 @@ new close as above rather than reporting the stale row.
 
 - **Weekend runs**: when the cron fires on a Beijing Sunday = US Saturday, there is NO new session; the
   snapshot repeats the prior briefing's close. Say so explicitly in 口径说明 rather than implying new data.
+  Tell: on 2026-09-20 the snapshot `timestamp` reverted to "Sep 17, 2026" while `price 222.27 / change +2.93`
+  were exactly the 9/18 close (and matched the previous day's briefing to the cent). Confirm by diffing the
+  new briefing's numbers against the previous `*_briefing.md`; if identical, frame the piece as
+  周末复盘 + 下周前瞻 (add 下周事件日历 and this week's 周涨跌幅) instead of a new session wrap.
+- **Gold-api.com returns the same value all weekend** (2026-09-19 and 09-20 both 4,379.00) — a duplicate
+  snapshot, not a flat market; label it as such when the w/wend run cites it.
 - **Gold API & Yahoo direct connections fail** *usually* (SSL `UNEXPECTED_EOF_WHILE_READING`) — but
   gold-api.com succeeds intermittently (2026-09-16 run returned a `XAU/USD` spot snapshot fine). Try it,
   then ALWAYS cross-check against media 现货/COMEX numbers (e.g. 东方财富《国际金融要情》gives 现货,
