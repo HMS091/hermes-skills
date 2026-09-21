@@ -108,6 +108,14 @@ new close as above rather than reporting the stale row.
   read **after-hours** values as the day change (opposite sign vs the briefing). Fixed 2026-09-16: cards now
   show the derived close (`price - change`) as the headline value and label the move 盘后 explicitly. If you
   edit that generator, keep that convention — never print a bare `change_pct` from the raw JSON.
+- **The generator must branch on snapshot shape (fixed 2026-09-21).** Always printing `price - change` as
+  "收盘" is only correct for the normal after-hours snapshot. The degenerate variant (see the `timestamp`
+  pitfall) carries `price` = session close and `change` = that session's move, so the old code rendered the
+  *prior* day's close as "收盘" (e.g. showed 219.34 for NVDA when the 9/18 close was 222.27), contradicting
+  the briefing. `is_afterhours(d)` now tests the `timestamp` for a clock time (`\d{1,2}:\d{2}\s*(AM|PM)?`):
+  with a time → headline `price - change`, sub-line labelled 盘后; without → headline `price`, sub-line
+  labelled 当日. Keep both branches whenever you touch the cards, and diff the rendered card against the
+  briefing's table before finishing.
 - `references/eastmoney-news-api.md` — Eastmoney search API mechanics + usage.
 - `templates/briefing_template.md` — the markdown briefing template (copy + fill).
 
