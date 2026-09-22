@@ -100,7 +100,18 @@ new close as above rather than reporting the stale row.
   are restricted to `/opt/data` (`HERMES_WRITE_SAFE_ROOT`) — `/tmp/foo.py` is refused, so put throwaway
   helpers in `/opt/data/scripts/` and delete them afterwards.
 - Check `/opt/data/scripts/` for existing helper scripts before building new fetch logic — the
-  environment already ships `fetch_news.py`, `generate_briefing_html.py`, `net_probe.py`.
+  environment already ships `fetch_news.py`, `generate_briefing_html.py`, `net_probe.py`, and
+  **`briefing_hist.py`** (created 2026-09-21: urllib-based Nasdaq historical fetch → prints last 8 rows
+  plus MA5/10/20/50/100/200, 20-day avg volume, 2-year and 52-week high/low with dates, and the prior
+  year-end close for YTD). Run `python3 /opt/data/scripts/briefing_hist.py` instead of rewriting it.
+- Prefer **`web_extract` on Eastmoney article URLs** for the full text of the day's roundups: the search
+  API truncates `content` to 150 chars. Two calls cover a whole briefing — `国际金融要情 |（周X YYYY.M.D）`
+  (all indices + 现货/COMEX/上金所 gold + oil + yields + dollar in one page) and the day's 美股收盘 roundup.
+  Find URLs by printing `r['url']` from `fetch_news.em_search()`.
+- Morning (Beijing 07:30) runs land ~3.5h after the US close, so the Nasdaq historical API frequently
+  **still ends at the previous session**. That is expected, not a failure: derive the close as `price - change`
+  and confirm against media % moves from the roundup articles (e.g. 2026-09-22 run: 227.38 / 375.21 derived,
+  media +2.30% / +3.00% ✓).
 
 ## Support files
 
