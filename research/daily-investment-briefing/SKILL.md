@@ -107,7 +107,22 @@ new close as above rather than reporting the stale row.
 - Prefer **`web_extract` on Eastmoney article URLs** for the full text of the day's roundups: the search
   API truncates `content` to 150 chars. Two calls cover a whole briefing — `国际金融要情 |（周X YYYY.M.D）`
   (all indices + 现货/COMEX/上金所 gold + oil + yields + dollar in one page) and the day's 美股收盘 roundup.
-  Find URLs by printing `r['url']` from `fetch_news.em_search()`.
+  Find URLs by printing `r['url']` from `fetch_news.em_search()`. **The `国际金融要情` page is the single best
+  source — it settles 现货金/COMEX/上金所/美元指数/10Y 收益率/三大指数 in one fetch; always extract it first.**
+- **When `web_extract` fails** (keyless Parallel/Firecrawl backend times out or 403s — common), fetch the
+  Eastmoney article directly with urllib + a crude tag strip; works every time, no proxy:
+
+  ```python
+  import urllib.request, re, html
+  req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+  h = urllib.request.urlopen(req, timeout=25).read().decode('utf-8', 'ignore')
+  t = re.sub(r'<script.*?</script>', '', h, flags=re.S)
+  t = re.sub(r'<[^>]+>', '\n', t); t = html.unescape(t); t = re.sub(r'\n\s*\n+', '\n', t)
+  print(t[t.find('美伊'):t.find('美伊')+4200])   # anchor on a phrase near the body start
+  ```
+- **`web_search` is unreliable here too** — keyless Firecrawl returns 403 for roughly half the queries and
+  `mcp__lightpanda__search` may be absent. Do NOT spend calls retrying; go straight to `fetch_news.py`
+  (Eastmoney, always works) and treat `web_search` results as a bonus when they do return.
 - Morning (Beijing 07:30) runs land ~3.5h after the US close, so the Nasdaq historical API frequently
   **still ends at the previous session**. That is expected, not a failure: derive the close as `price - change`
   and confirm against media % moves from the roundup articles (e.g. 2026-09-22 run: 227.38 / 375.21 derived,
