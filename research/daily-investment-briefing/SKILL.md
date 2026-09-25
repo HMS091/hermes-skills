@@ -104,6 +104,19 @@ new close as above rather than reporting the stale row.
   **`briefing_hist.py`** (created 2026-09-21: urllib-based Nasdaq historical fetch → prints last 8 rows
   plus MA5/10/20/50/100/200, 20-day avg volume, 2-year and 52-week high/low with dates, and the prior
   year-end close for YTD). Run `python3 /opt/data/scripts/briefing_hist.py` instead of rewriting it.
+- **Helpers added 2026-09-25 (keep them, they save a full round trip every run):**
+  `em_urls.py <keywords...>` prints `date | title | url` (fetch_news.py only prints truncated content and
+  hides URLs — you need the URL to extract full text); `em_article.py <url> [chars] [offset]` fetches an
+  Eastmoney article with urllib + crude tag strip (the reliable path when `web_extract` 403s/times out);
+  `ma_calc.py` recomputes NVDA/TSLA MA5/10/20/50/100/200 **after injecting the derived closes the lagging
+  Nasdaq API is still missing** (edit the `INJ` dict at the top with `price - change` before running).
+  `execute_code` is BLOCKED in cron mode — use `terminal` for all of this.
+- **Cleanest gold-close 口径: the 06:3x 美股收盘 quick-news article.** It carries a one-line
+  `伦敦金现跌X.XX%，报NNNN.NN美元/盎司；伦敦银现…` — an explicit % + level for spot, which
+  `国际金融要情` does NOT give (that page lists 现货黄金/COMEX/上金所9999/黄金T+D/沪金主连 levels + 美元指数
+  + every US Treasury tenor, but no spot % change). Search keyword `伦敦金现 收盘` lands on it directly.
+  Also expect the RMB-priced gold legs (上金所/T+D/沪金主连) to fall **3–5x harder** than 伦敦金现 — report
+  both, it signals domestic premium/speculative unwind rather than pure FX.
 - Prefer **`web_extract` on Eastmoney article URLs** for the full text of the day's roundups: the search
   API truncates `content` to 150 chars. Two calls cover a whole briefing — `国际金融要情 |（周X YYYY.M.D）`
   (all indices + 现货/COMEX/上金所 gold + oil + yields + dollar in one page) and the day's 美股收盘 roundup.
