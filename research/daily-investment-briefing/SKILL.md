@@ -74,6 +74,15 @@ new close as above rather than reporting the stale row.
 
 ## Pitfalls
 
+- **Identify the snapshot SHAPE before computing anything** (2026-09-27 run): the pre-run JSON can flip
+  from the after-hours snapshot to the **official close** payload — `price 225.07 / change +0.49 / change_pct 0.22`
+  with a `timestamp` that has **no clock time** (`"Sep 24, 2026"`). Here `price` IS the session close and
+  `change` IS that session's move (225.07 = 9/25 close, 224.58 = 9/24 close → +0.49 ✓; TSLA 372.11 vs 377.94
+  → −5.83 ✓). Rules: clock time in `timestamp` ⇒ after-hours, derive `price − change`; bare date ⇒ official
+  close, use `price` as-is. The historical API **does catch up**: fetch it first and compare `rows[0]` — if
+  `rows[0].close == price` and `rows[0-1].close == price − change`, no derivation/injection is needed and
+  `ma_calc.py`'s `INJ` dict should stay empty. Never trust the `timestamp` date label (it read "Sep 24" for the
+  Sep 25 close) — the historical API is the authority.
 - **Weekend runs**: when the cron fires on a Beijing Sunday = US Saturday, there is NO new session; the
   snapshot repeats the prior briefing's close. Say so explicitly in 口径说明 rather than implying new data.
   Tell: on 2026-09-20 the snapshot `timestamp` reverted to "Sep 17, 2026" while `price 222.27 / change +2.93`
