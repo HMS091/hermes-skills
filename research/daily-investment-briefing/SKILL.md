@@ -113,6 +113,37 @@ new close as above rather than reporting the stale row.
   **`briefing_hist.py`** (created 2026-09-21: urllib-based Nasdaq historical fetch → prints last 8 rows
   plus MA5/10/20/50/100/200, 20-day avg volume, 2-year and 52-week high/low with dates, and the prior
   year-end close for YTD). Run `python3 /opt/data/scripts/briefing_hist.py` instead of rewriting it.
+  It used to hard-code `todate="2026-09-22"` (which silently made the API look weeks stale) and now defaults
+  to today; **if a helper prints rows that are older than the snapshot, check its `todate`/`INJ` before
+  blaming the API**.
+- **The historical API catches up fully when the session is old enough (2026-09-28 run):** `rows[0]` was
+  `09/25 close 225.07` = exactly the snapshot `price`, and `rows[1] = 224.58 = price − change`. When that
+  holds, **no derivation and no `INJ` injection is needed** — leave `INJ` empty in `ma_calc.py`, confirm by
+  printing `rows[0]`, and compute MAs straight off the API. Only reach for `price − change` when the API
+  still ends at the prior session.
+- **Beijing-Monday-07:32 runs (US Sunday ~19:30 ET) have no new US session** — same "no new data" shape as
+  the weekend, and NVDA/TSLA repeat the previous briefing's Friday close to the cent (diff the two `.md`s to
+  confirm). **The difference from Sat/Sun: gold-api DOES return a genuine new-week quote** (2026-09-28:
+  4,264.30 @ 23:30 UTC vs Friday's ~4,285.76, and it matched the 21世纪经济报道 6:35 print of 4,264.08
+  −0.49% to the dollar). So frame Monday runs as **周一开盘前瞻**: gold/oil/futures are live, equities are
+  not, and the payload is this week's calendar.
+- **Best new-week intraday snapshot source:** the 07:0x–07:1x Eastmoney quick-news pair
+  `一觉醒来，…` / `国际油价拉升，布油涨破…美元…` (source 21世纪经济报道) — one paragraph carries 截至北京时间 6:35 的
+  WTI/布伦特 %+level、现货黄金 %+level、现货白银、美股三大指数期货涨跌、加密货币爆仓人数、CME 加息概率、伊朗/特朗普表态。
+  Pair it with `一周前瞻` (stock.eastmoney.com, 07:17) = the week calendar + 瑞银/美银等机构对美光/耐克的最新修正。
+  That two-article pair plus `国际金融要情 |（周X …）` covers a whole Monday briefing.
+- **Crude-oil 口径 sanity check:** if Brent − WTI is much more than ~$6, one leg is mis-sourced. The
+  2026-09-27 briefing carried "Brent 104.32 / WTI 92.41" (a $12 spread) which cannot be reconciled with the
+  next morning's Brent 98.84 (+1.4%); the two independent papers that day implied Brent ≈ 97.6 and WTI 92.41
+  — i.e. the Brent figure was wrong. Recompute the prior close from `open ÷ (1 + %change)` in the morning
+  article and disclose the correction instead of propagating the old number.
+- **`web_extract` on Eastmoney article URLs was 100% reliable this run (2026-09-28, 7/7 URLs)** — including
+  `国际金融要情`, whose body the raw-urllib `em_article.py` path **cannot** see (the static HTML contains no
+  `现货黄金`/`美元指数`; the body is injected). So try `web_extract` FIRST, batches of 3–5 URLs; keep
+  `em_article.py` as the fallback it was designed to be.
+- **Same-day Open-price conflicts are normal, never merge them:** 2026-09-28 财联社《早报》 quoted 现货黄金
+  4,285.12 (+0.27%) while 21世纪经济报道 (6:35) quoted 4,264.08 (−0.49%) — a U-turn in sign. List both, and pick
+  as headline whichever agrees with the collected gold-api value.
 - **Helpers added 2026-09-25 (keep them, they save a full round trip every run):**
   `em_urls.py <keywords...>` prints `date | title | url` (fetch_news.py only prints truncated content and
   hides URLs — you need the URL to extract full text); `em_article.py <url> [chars] [offset]` fetches an
