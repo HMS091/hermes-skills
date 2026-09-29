@@ -132,11 +132,34 @@ new close as above rather than reporting the stale row.
   WTI/布伦特 %+level、现货黄金 %+level、现货白银、美股三大指数期货涨跌、加密货币爆仓人数、CME 加息概率、伊朗/特朗普表态。
   Pair it with `一周前瞻` (stock.eastmoney.com, 07:17) = the week calendar + 瑞银/美银等机构对美光/耐克的最新修正。
   That two-article pair plus `国际金融要情 |（周X …）` covers a whole Monday briefing.
-- **Crude-oil 口径 sanity check:** if Brent − WTI is much more than ~$6, one leg is mis-sourced. The
-  2026-09-27 briefing carried "Brent 104.32 / WTI 92.41" (a $12 spread) which cannot be reconciled with the
-  next morning's Brent 98.84 (+1.4%); the two independent papers that day implied Brent ≈ 97.6 and WTI 92.41
-  — i.e. the Brent figure was wrong. Recompute the prior close from `open ÷ (1 + %change)` in the morning
-  article and disclose the correction instead of propagating the old number.
+- **Crude-oil 口径 sanity check:** a Brent − WTI spread much wider than ~$6 is a flag, but *not* automatically
+  an error — in the Hormuz-crisis regime the whole `国际金融要情` row legitimately prints Brent 105.30 vs
+  WTI 93.31 (~$12, 2026-09-29). What actually proved the 2026-09-27 Brent 104.32 wrong was that it could not
+  be reconciled with the next morning's Brent 98.84 (+1.4%). So: reconcile across two days/sources first, and
+  when a single source is internally consistent, report it with a one-line caveat instead of "correcting" it.
+- **A normal Tuesday-morning run (Beijing 07:3x = US 19:3x the prior day) DOES have a new US session.**
+  Shape check: `timestamp` carries a clock time (`Sep 28, 2026 7:30 PM ET`) ⇒ after-hours snapshot ⇒ derive
+  `price − change`. 2026-09-29 worked example: NVDA 229.68 − 0.82 = **228.86** matched media "+1.68%" to the
+  cent; TSLA 358.38 − 0.93 = 357.45 but the official close was **357.36 (−14.75, −3.96%)** — the derivation
+  can be a few cents off, so **always grep a US ticker-history page (`investing.com`/`stockanalysis.com`
+  "Closed" line prints price + change + % together) and prefer the official close** in the table, keeping the
+  derived number only as the cross-check.
+- **`国际金融要情` can print a WRONG SIGN on the gold row** (2026-09-29: "现货黄金 4,123.70, +0.21%" on a day
+  spot closed ~−3.8% and every other source, incl. COMEX futures, was down 3–4%). Treat a sign that
+  contradicts the whole market as a benchmark mismatch in that table — do not average it in, say so in 口径说明,
+  and take the day's spot from the news wires instead.
+- **Best gold-close source for a big down day: `金价查询网` (huangjinjiage.cn)**, whose daily wrap prints the
+  intraday high, the low, `创X月X日以来新低`, and a `截至 23:57 报 NNNN.NN（−Y%）` line — one fetch settles the
+  spot close and the range. Pair it with the 05:4x–07:0x Eastmoney 快讯 ("现货黄金跌近4%，报4115.24美元/盎司") for
+  a second confirmation.
+- **US-side news for NVDA/TSLA is best found with plain English `web_search`** (worked well 2026-09-29:
+  "NVIDIA Nvidia stock September 28 2026 close" surfaced the buyback story + price/volume; "Tesla stock
+  September 28 2026" surfaced the JPMorgan PT cut and the exact close). Eastmoney covers the Chinese angles
+  (宏观/黄金/日程); the English search covers company-level catalysts and the official closing print.
+- **Week-ahead calendar source (Monday/Tuesday runs):** the Eastmoney/腾讯转载 of 见闻财经日历
+  《下周重磅日程：美国非农与中国PMI…》 carries the whole week in one article (OpenAI DevDay, Trump AI
+  meeting + America.gov, Micron earnings, Tesla Roadster/Cybercab, 非农 date, A-share holiday window).
+  Don't rebuild the calendar from scratch — search `本周重磅日程 <month>日` and extract it.
 - **`web_extract` on Eastmoney article URLs was 100% reliable this run (2026-09-28, 7/7 URLs)** — including
   `国际金融要情`, whose body the raw-urllib `em_article.py` path **cannot** see (the static HTML contains no
   `现货黄金`/`美元指数`; the body is injected). So try `web_extract` FIRST, batches of 3–5 URLs; keep
@@ -149,7 +172,9 @@ new close as above rather than reporting the stale row.
   hides URLs — you need the URL to extract full text); `em_article.py <url> [chars] [offset]` fetches an
   Eastmoney article with urllib + crude tag strip (the reliable path when `web_extract` 403s/times out);
   `ma_calc.py` recomputes NVDA/TSLA MA5/10/20/50/100/200 **after injecting the derived closes the lagging
-  Nasdaq API is still missing** (edit the `INJ` dict at the top with `price - change` before running).
+  Nasdaq API is still missing** (edit the `INJ` dict at the top with `price - change` before running;
+  2026-09-29 shape: `INJ = {"NVDA": [("09/28/2026", 228.86)], "TSLA": [("09/28/2026", 357.36)]}`,
+  `TODATE` = today, API still ended at 09/25 — the printed `newest rows` line confirms the injection was needed).
   `execute_code` is BLOCKED in cron mode — use `terminal` for all of this.
 - **Cleanest gold-close 口径: the 06:3x 美股收盘 quick-news article.** It carries a one-line
   `伦敦金现跌X.XX%，报NNNN.NN美元/盎司；伦敦银现…` — an explicit % + level for spot, which
