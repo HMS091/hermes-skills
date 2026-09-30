@@ -205,6 +205,9 @@ new close as above rather than reporting the stale row.
   **still ends at the previous session**. That is expected, not a failure: derive the close as `price - change`
   and confirm against media % moves from the roundup articles (e.g. 2026-09-22 run: 227.38 / 375.21 derived,
   media +2.30% / +3.00% ✓).
+- **`国际金融要情` 的「涨跌幅」列可信度低于其「价格」列** — 三个不同的错法已复现（9/29 黄金 +0.21% 而实际 −3.8%；9/30 黄金 −0.11% 而实际 +1.64%；9/30 其表格 WTI +0.06% 而结算价 −3.48%）。规则：**只从该页取价格与美债收益率，涨跌幅一律以结算价/第一财经/财联社稿为准**；同页内文与表格也会互相矛盾（9/30 穆尔班内文 +2%/120 美元 vs 表格 114.60/−1.98%）——以表格价格为准、矛盾项直接不采用并在口径说明点名。
+- **周二早上确认美股官方收盘的最快路径**：`web_search "<SYM> stock closing price <English date>"` 一次同时返回 Yahoo Finance history 行（open/high/low/**close**/volume）、CNBC 报价页（price + chg + %chg）、Investing.com 表格（含 Vol. 与 Change %）——三者一致即锁死收盘，比在中文稿里找数字快且准（9/29 跑：NVDA 227.21/−1.65/−0.72%、TSLA 352.84/−4.61/−1.29%，与 `price − change` 逐位相同）。
+- **周二稿的三篇组合拳**：《国际金融要情》（价格/美债/汇率/大宗全表）+ 中国证券报《美股下跌 芯片、光通信股逆势大涨》（费半与个股涨幅、贵金属 %、油价结算价、OpenAI DevDay）+ 第一财经《美三大股指再跌！…》（七巨头逐个涨跌幅、JOLTS/消费者信心、Fed 官员原话与 CME 概率变化）。三篇 `web_extract` 一次批量取，覆盖整份简报，无需再搜英文宏观。
 
 ## Support files
 
