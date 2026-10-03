@@ -127,6 +127,10 @@ new close as above rather than reporting the stale row.
   4,264.30 @ 23:30 UTC vs Friday's ~4,285.76, and it matched the 21世纪经济报道 6:35 print of 4,264.08
   −0.49% to the dollar). So frame Monday runs as **周一开盘前瞻**: gold/oil/futures are live, equities are
   not, and the payload is this week's calendar.
+- **北京周六 07:3x 跑 = 美股周五 19:3x，有完整新 session**（2026-10-03 验证）：别把"北京时间周六"误判成周末空跑——`timestamp` 带 `Oct 2, 2026 7:30 PM ET` ⇒ 盘后快照 ⇒ 走常规 `price − change` + 英文收盘核对流程，gold-api 也是真实新报价。只有**北京周日/周一**才是"无新 session"形状。
+- **金价查询网报价表有个"昨收"语义陷阱**（2026-10-03 跑）：`huangjinjiage.cn/quote/117152.html` 表头写「今日价格 | 涨跌 | 涨跌幅 | 收盘价格 | …」，但**「收盘价格」列其实是前一交易日收盘，不是当日收盘**（10/2：现货 4,139.28 / −37.99 / −0.91% / 「收盘价格」4,177.27 = 10/1 收盘）。把它当当日收盘整期就错了。正确用法：**「今日价格」+「收盘价格(=昨收)」正好构成一对，能和本报前一期的现货收盘逐位咬合**（4,177.04 × (1−0.00904) = 4,139.28 ✓）。同页还可拿到纽约金期货（10/2：4,170.09 / −0.77%）与上金所 9999/T+D。
+- **现货黄金收盘的第二校验源：CNBC `XAU=` 报价页**（`cnbc.com/quotes/XAU=`）——一个 fetch 同时给 Last / Prev Close / Day High / Day Low（10/2：4,137.56、−40.20、−0.96%，前收 4,177.761，区间 4,125.94–4,223.95），与金价查询网/`gold-api` 快照三方对齐即可锁定现货收盘。
+- **官方成交量口径：东财《美股成交额前20》的成交额 ÷ 当日收盘价 = 官方股数**，用来取代含盘后的 nasdaq 快照量（10/2：NVDA 316.49亿 ÷ 233.95 ≈ 1.351 亿 vs 快照 1.3506 亿；TSLA 200.38亿 ÷ 370.59 ≈ 5,407 万 vs 快照 5,530 万），再除以 20 日均量得到"放量/缩量"判断。
 - **Best new-week intraday snapshot source:** the 07:0x–07:1x Eastmoney quick-news pair
   `一觉醒来，…` / `国际油价拉升，布油涨破…美元…` (source 21世纪经济报道) — one paragraph carries 截至北京时间 6:35 的
   WTI/布伦特 %+level、现货黄金 %+level、现货白银、美股三大指数期货涨跌、加密货币爆仓人数、CME 加息概率、伊朗/特朗普表态。
