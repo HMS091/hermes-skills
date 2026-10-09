@@ -72,6 +72,14 @@ Also note the historical API lags: right after a session it may still end at the
 Use `fromdate=<month start>&todate=<today>` and take `rows[0]`; if it is the prior session, derive the
 new close as above rather than reporting the stale row.
 
+## 2026-10-09 跑（周五 07:3x = 美股周四 19:3x，有完整新 session）
+
+- 常规形态：`timestamp = "Oct 8, 2026 7:30 PM ET"` ⇒ 盘后快照 ⇒ `price − change`。NVDA 231.07−0.59=**230.48**（fiscal.ai/Convex「Close 230.48, −2.94% vs 237.47」，量 114,275,634）；TSLA 374.88−(−0.12)=**375.00**（Exa/融数「closed $375.00, −2.81 −0.74%」）。
+- **最佳英文收盘源**：`web_search "<SYM> stock closing price <English date>"` 直接返回 **exa.ai/library/markets/stock/<SYM>**（Open/High/Low/Close/Volume 一行全给）与 **fiscal.ai/company/NasdaqGS-<SYM>**（Open/Close/Change vs 前收/Volume）——两个都能逐位咬合 `price − change`。
+- **A 类新催化剂：AI 需求数据被修正**。FT 10/8 披露 OpenAI 年化营收「接近 500 亿」vs 此前引用的 700 亿（差 200 亿，口径差异），CNBC 证实 ⇒ 纳指 −1.25%、NVDA −2.94%、甲骨文 −5.5~6%、AMD/博通/英特尔 −4~6%、CoreWeave/Nebius −7%、应用光电 −13%、Coherent −9.62%。**这类「头部大模型公司营收预期差」是 AI 链最有效的单点利空，检索关键词 `OpenAI 年化营收 200亿`。**
+- **黄金收盘用《投资早参》/07:00 快讯那句「现货黄金涨 0.53%，报 4131.89 美元/盎司」（COMEX +0.43% 报 4158.30）**，与前一期表内 4,110.52 逐位咬合（×1.0052）⇒ 本期表内取 4,131.89；同日《国际金融要情》07:14 另给一套更晚快照（现货 4,140.01 / COMEX 4,163.30 / 上金所 9999 895.00 元/克 / T+D 893.04），**基准时点不同，并列不混算**。另注意**金涨银跌**（现货银 −1.02%）⇒ 当日是「抗通胀+汇率」驱动而非避险。
+- **本期长端美债首次反向**：10Y −5bp 至 5.227%、30Y −6bp 至 5.601%（此前两周连创 24 年新高），美元指数 −0.15% 至 102.12 ⇒ 黄金/地产喘息；但布油 +4.07% 破 104、WTI +3.64% 至 91.49（对伊新制裁 + 胡塞袭利雅得机场）⇒ 通胀源头同时被点燃。**「收益率回落」与「油价上冲」同向作用部分抵消，结论写成区间震荡。**
+
 ## Pitfalls
 
 - **Identify the snapshot SHAPE before computing anything** (2026-09-27 run): the pre-run JSON can flip
@@ -222,6 +230,7 @@ new close as above rather than reporting the stale row.
 
 ## Support files
 
+- `generate_briefing_html.py` **briefing-card 方向标签必须从表格解析，不能用 `"📈" in content`**（2026-10-09 修复）。模板固定章节标题 `## 📈 技术面简析` 永远含 📈，旧写法把**每张卡片**都标成「上涨」，大跌日（如 10/9 NVDA −2.94%）也是「上涨」。现在用 `direction_from_content(content)`：逐行找 `|` 开头且含 `NVDA`/`TSLA`+`%` 的行情概览行，取**绝对值最大的那个百分比的符号**（混合日按主线走），无匹配则不加方向标签。改生成器后务必 `grep -c '📉 下跌'`/`'📈 上涨'` 确认两种标签都出现、且第一张卡片的标签与当日报表一致。
 - `generate_briefing_html.py` status cards: the snapshot `change/change_pct` made the dashboard's top cards
   read **after-hours** values as the day change (opposite sign vs the briefing). Fixed 2026-09-16: cards now
   show the derived close (`price - change`) as the headline value and label the move 盘后 explicitly. If you
