@@ -1,7 +1,7 @@
 ---
 name: china-urban-policy-analysis
-description: Analyze Chinese State Council (国务院) and ministerial policy documents related to urban development, land redevelopment, low-utility land (低效用地), shantytown renovation (棚户区改造), demolition/relocation (拆迁), and urban renewal financing. Extract actionable strategies for project acceleration and funding.
-trigger: "User shares a gov.cn URL of a policy document (国发/国办发/住建部文件) related to urban renewal, land policy, demolition, or real estate, and asks for analysis of how it affects their project."
+description: Use when 核证中国房地产/土地政策传闻、分析部委文件影响、判断某市征收中地块能否出让。
+trigger: "用户带来一条房地产/土地政策消息（尤其含'内部文件''要停''两年内不再批'类传闻）要求核实真伪；给出一份国务院/部委/地方政策文件（含 gov.cn 链接或文号）要求分析对项目的影响；或问某个具体城市在征收/拆迁阶段的地块能否继续挂牌出让。"
 tags: [china, policy, urban-renewal, real-estate, land-redevelopment, government]
 ---
 
@@ -9,7 +9,32 @@ tags: [china, policy, urban-renewal, real-estate, land-redevelopment, government
 
 Analyze State Council and ministerial policy documents to extract actionable intelligence for urban redevelopment projects. The typical user scenario: a company has a project included in low-utility land redevelopment planning, but local fiscal constraints are blocking demolition/relocation.
 
+## When to Use
+
+三类入口，全部适用本技能：
+
+- **核证传闻**：用户听到一条消息（常带"内部文件""要停""两年内不再批"），要求查有没有这回事、源文件在哪 → 走 Phase 0，且不能停在"纯属谣言"。
+- **分析文件**：用户给一份国务院/部委/地方文件（gov.cn 链接或文号），问对项目有什么影响 → 走 Phase 1–6。
+- **判定属地项目**：用户说某市 N 块地正在征收/拆迁，问还能不能挂牌出让、项目要不要停 → 走 Phase 7 + `references/housing-land-supply-control-rules.md`。
+
+三类共同交付要求（用户已明确、不要退让）：**结论先行**、真实数据带来源与日期、**必须主动给负面风险与"能挂≠能卖"的判断**；中文输出，不得只报喜。
+
 ## Workflow
+
+### Phase 0: 传闻核证与文件定位（用户说的是"我听说有个内部文件"时先做这一步）
+
+用户通常不带链接，只带一句被转述的结论（例："两年内不再有新住宅开发项目，内部文件说的"）。顺序：
+
+1. **拆解说法**：把传闻拆进"发文机关／文号／生效时间／适用范围"四个槽位。多数传闻这四个槽位全空——这本身就是信号。
+2. **以文号为锚检索**：先按"机关 + 政策主题"搜到文号（形如 `自然资发〔20XX〕XX号`、`建房规〔20XX〕X号`、`国发〔20XX〕X号`），再用**文号本身**当查询词检索，命中率远高于用正文表述去搜。拿全文最快的路径是政府网站的**转载页**：部委门户 → 省级政府门户 → 市县级自然资源/住建局网站，这类页面带"索引号+文号+发文日期+全文"，比新闻稿权威、比门户首屏好抓。
+3. **分层取证**，结论里逐层标注来源类型（可信度从高到低）：① 文件原文（政府网站全文页）→ ② 部委新闻发布会实录/司长原话 → ③ 权威媒体（新华社/央广/证券时报/财新/新京报）→ ④ 行业机构数据（中指院、克而瑞、普睿数智、券商研报）→ ⑤ 自媒体（头条号/网易号/公众号"XX看楼市"）。**第⑤层只用于定位传闻的表述形式，绝不作为依据。**
+4. **找官方辟谣**：部委对误读通常在**当周**就开发布会澄清，检索"文号 + 解读／发布会／不等于"。
+5. **反推传闻配方**（决定怎么向用户解释）：找齐下列原料，多半能完整还原——
+   - 同向条款（如"新增建设用地原则上不用于经营性房地产开发"）
+   - **反向条款被搬用**：同一文件里方向相反的数字，如给房企的土地款宽限"余款两年内缴清"被读成"两年内不许开发"
+   - 机构预测（"预计未来两年供地维持低位"）
+   - 券商测算（对开工量/土地成交的跌幅预测）
+6. **不要停在"纯属谣言"**：核对用户描述的现象是否对应**另一条真实机制**（最典型：去化周期挂钩供地）。正确结论形态是"文件不存在，但你听到的X有另一条真政策来源 + 该来源的触发条件"——这比单纯辟谣有用得多。
 
 ### Phase 1: Fetch the Document
 
@@ -133,8 +158,23 @@ Always add a summary table like this:
 | [specific topic] | ⭐⭐⭐ |
 | 短期实效性 | ⭐⭐⭐ |
 
+### Phase 7: 判定地方项目能否继续（征收中的地块能否挂牌出让）
+
+问题是"某市这N块地还能不能拆迁完挂牌出让"时，按此顺序判，不要用全国结论替代：
+
+1. **先定城市，再写答案。** 可执行结论随城市去化周期档位翻转（见 `references/housing-land-supply-control-rules.md`）；拿到城市名之前写的全国层面长篇分析基本作废。
+2. **定地块性质**：是"存量建设用地盘活"（旧城/城中村/棚改，城镇开发边界内既有建设用地）还是"新增建设用地"（农用地/未利用地转用）。前者不受"新增建设用地不用于经营性房地产开发"约束，后者受双重约束。
+3. **查该市口径的去化周期档位**（>36个月 / 18–36个月 / <18个月），这直接决定新增商品住宅用地能否放行。
+4. **区分"批准环节"与"成交环节"**：法规上征收批复→拆净→挂牌这条链不受辟谣类传闻影响；真正卡项目的是①去化周期档位限制供地、②增存挂钩（新增指标不得超过盘活存量面积）、③销售制度改革后的出让条件（自有资金购地、优先现房销售、土地款可分期）让房企不敢拿地。
+5. **给"能不能卖出去"，不只给"能不能挂"**：查该市近月住宅用地成交与流拍、溢价率、出让金同比、房价同比。地挂出来零成交的城市，"政策允许"没有意义。
+6. **时间压力反向提醒**：征地批准文件满两年未用地或未实施征地补偿安置方案会**自动失效**，所以项目方的时间压力是"要快"，不是"等政策"。
+
 ## Pitfalls
 
+- **先确定城市再写长答案**：房地产/土地政策的可执行结论取决于**城市**（去化周期档位决定供地能否放行）。未拿到城市名就展开全国层面分析，等于写一半要重写；用户报出城市后按 Phase 7 重做属地判定，不要在主答案上打补丁。
+- **省级口径 ≠ 市级口径，引用必须标层级**：省级通稿常称"全省去化周期连续处于合理区间"（由省会/核心城市拉高），同期同省非省会地市仍可能远超36个月。把省级表述当成某市的依据是硬错误；引用时写明"省级口径/市级口径"和数据来源机构。
+- **反向条款是传闻的主要原料**：同一文件里方向相反的数字最容易被搬到谣言里（给企业的宽限被读成对企业的禁止）。核证时逐条比对传闻表述能否在原文找到字面对应，找不到字面对应基本就是拼接。
+- **区分"文件不存在"与"现象不存在"**：辟谣只解决前者，用户真正要的是后者——务必回到"有没有另一条真机制"那一步。
 - **gov.cn does NOT have Cloudflare** — unlike blockchain explorers, government.cn sites can be curled directly. Do not waste time trying browser tools.
 - **Document text is in the raw HTML body** — do NOT look for `<article>`, `<div class="content">`, or similar selectors. Strip ALL tags from `<body>`.
 - **章/节 numbering**: Chinese government documents use 一、二、三... for chapters and （一）（二）（三）... for sections. Use regex, not substring matching, to find structure.
@@ -142,3 +182,7 @@ Always add a summary table like this:
 - **时效性**: New policies (e.g., 2026年5月) are positive signals but need 3-6 months to cascade to provincial implementation rules. Advise on timing.
 - **User language**: User is Chinese-speaking. Deliver the full analysis in Chinese. Use concise tables and bullet points. Do NOT ask "should I continue?" — just complete the full analysis.
 - **Proactive delivery**: Do not ask for permission to proceed. Collect all data and deliver the complete analysis in one response.
+
+## 参考文件
+- `references/guofa-2026-12-urban-renewal-key-clauses.md` — 国发〔2026〕12号城市更新关键条款摘录
+- `references/housing-land-supply-control-rules.md` — 现行住宅用地供应管控规则集（新增建设用地用途限制、增存挂钩、去化周期挂钩供地分档、销售制度改革后的出让条件、征地批复时效）+ 城市级去化周期/房价/土地成交/出让公告数据源清单 + 库存口径陷阱

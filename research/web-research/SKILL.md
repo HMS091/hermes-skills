@@ -17,6 +17,7 @@ curl -s -m 40 -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (
   -H "Accept-Language: zh-CN,zh;q=0.9" "https://目标站/..." | python scripts/html_to_text.py
 ```
 - 中文站点**必须**带 `Accept-Language: zh-CN,zh;q=0.9`，否则部分站返回空/默认英文
+- **政策/法规/官方数据类站点**：优先抓部委门户、省级政府门户、市县级自然资源局/住建局网站的**转载页**（带"索引号+文号+全文"，比新闻稿权威、比门户首屏好抓），并用**文号**（形如 `自然资发〔20XX〕XX号`、`建房规〔20XX〕X号`）当查询词，命中率远高于用正文表述去搜；政府站基本不反爬。政策类查证的完整分层取证流程见 `china-urban-policy-analysis`。
 - 国内个人博客（Typecho/WordPress 系）基本不反爬，直接抓即可
 - 抓到的正文用 `grep`/`find` 定位关键词段落（如 `python -c` 里 `t.find('关键词')` 后切片）
 
