@@ -1,69 +1,65 @@
-# Playwright Browser Install Workaround
+# Installing / repairing Scrapling's Chromium (behind the GFW)
 
-When Playwright/Patchright browser download fails from `cdn.playwright.dev` (network drops, GFW issues):
-
-## Step 1: Download with curl resume
+The official Playwright CDN is unreachable from this network:
+`cdn.playwright.dev`, `playwright.azureedge.net`, `playwright.download.prss.microsoft.com` all time out.
+`npmmirror` mirrors the **same path layout**, so the normal installer works unchanged:
 
 ```bash
-# First attempt (might fail partway)
-curl -L -C - --connect-timeout 15 --max-time 300 \
-  -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" \
-  -o /tmp/chrome-headless-shell.zip \
-  "https://cdn.playwright.dev/builds/cft/<REVISION>/linux64/chrome-headless-shell-linux64.zip"
+export PLAYWRIGHT_BROWSERS_PATH=/opt/data/scrapling-browsers
+export PLAYWRIGHT_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/playwright
+export TMPDIR=/tmp
+/opt/data/scrapling-venv/bin/python -m playwright install chromium chromium-headless-shell
 ```
 
-The `-C -` flag auto-resumes partial downloads. Run it again if it fails - it will pick up where it left off.
+One command, both architectures of artifact (step 1 of the script `bash /opt/data/scripts/scrapling_install_browsers.sh`).
 
-## Step 2: Identify the right target directory
+## What the installer actually fetches
 
-Playwright installs browsers under its driver package:
-```
-/opt/data/scrapling-venv/lib/python3.13/site-packages/playwright/driver/package/.local-browsers/
-```
+Playwright ≥1.60 no longer downloads `builds/chromium/<revision>` for linux-x64 — it downloads
+**Chrome for Testing**:
 
-The directory name pattern is `{browser_name}-{revision}`, e.g. `chromium-1223`.
+| Browser | URL path | Directory it lands in |
+|---|---|---|
+| chromium | `builds/cft/<CFT version>/linux64/chrome-linux64.zip` | `<browsers>/chromium-<rev>/chrome-linux64/chrome` |
+| chromium-headless-shell | `builds/cft/<CFT version>/linux64/chrome-headless-shell-linux64.zip` | `<browsers>/chromium_headless_shell-<rev>/chrome-headless-shell-linux64/chrome-headless-shell` |
 
-## Step 3: Extract with proper prefix stripping
+(revision ⇄ CFT version come from `site-packages/playwright/driver/package/browsers.json`;
+for revision 1223 it is Chrome for Testing 148.0.7778.96.)
 
-The zip contains a `chrome-headless-shell-linux64/` prefix directory. Extract content directly into the Playwright target:
+Mirror hosts verified from this box:
+- ✅ `https://cdn.npmmirror.com/binaries/playwright` — serves both `builds/cft/*` and (partial) `builds/chromium/*`
+- ✅ `https://cdn.npmmirror.com/binaries/chrome-for-testing/<ver>/linux64/...` — CFT zips directly (no `/builds/cft/` prefix)
+- ⚠️ `https://mirrors.huaweicloud.com/playwright/...` — serves `builds/chromium/*` but answers **HTML** for `builds/cft/*`, which makes the installer fail with `End of central directory record signature not found`
+- ❌ `registry.npmmirror.com/-/binary/playwright/builds/chromium/1223/` only carries linux-**arm64** (x64 missing)
+
+## Manual fallback (air-gapped / installer refuses)
+
+1. Download `chrome-linux64.zip` (+ `chrome-headless-shell-linux64.zip`) from the CFT mirror above.
+2. Extract into the expected directory and keep the zip's own top-level folder name:
 
 ```python
 import zipfile, os
-zip_path = '/tmp/chrome-headless-shell.zip'
-target = '/opt/data/scrapling-venv/lib/python3.13/site-packages/playwright/driver/package/.local-browsers/chromium-1223'
-
-with zipfile.ZipFile(zip_path, 'r') as zf:
-    for info in zf.infolist():
-        if info.filename.startswith('chrome-headless-shell-linux64/'):
-            rel_path = info.filename[len('chrome-headless-shell-linux64/'):]
-            if not rel_path:
-                continue
-            dest = os.path.join(target, rel_path)
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            if not info.filename.endswith('/'):
-                with open(dest, 'wb') as f:
-                    f.write(zf.read(info.filename))
-                os.chmod(dest, 0o755)
-
-chrome_bin = os.path.join(target, 'chrome-headless-shell')
-if os.path.exists(chrome_bin):
-    os.chmod(chrome_bin, 0o755)
+for zpath, dest in [('/tmp/chrome-linux64.zip', '/opt/data/scrapling-browsers/chromium-1223'),
+                    ('/tmp/chrome-headless-shell-linux64.zip', '/opt/data/scrapling-browsers/chromium_headless_shell-1223')]:
+    os.makedirs(dest, exist_ok=True)
+    with zipfile.ZipFile(zpath) as z:
+        z.extractall(dest)
+        for info in z.infolist():                      # python's zipfile drops the exec bit
+            mode = info.external_attr >> 16
+            if mode:
+                os.chmod(os.path.join(dest, info.filename), mode & 0o7777)
+    open(os.path.join(dest, 'INSTALLATION_COMPLETE'), 'w').close()   # marker Playwright checks
 ```
 
-## Alternative: Use `PLAYWRIGHT_CHROMIUM_EXECUTABLE`
+Without the `INSTALLATION_COMPLETE` marker Playwright treats the directory as not installed and
+tries to download again. `unzip` is **not installed** on this box — use python's zipfile.
 
-If a Chrome/Chromium is already installed elsewhere, set:
+## Verify
 
 ```bash
-export PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chrome
+/opt/data/scrapling-browsers/chromium-1223/chrome-linux64/chrome --version   # -> Google Chrome for Testing 148.x
+TMPDIR=/tmp /opt/data/scrapling-browsers/chromium-1223/chrome-linux64/chrome \
+  --headless=new --no-sandbox --disable-dev-shm-usage --dump-dom "data:text/html,<h1>ok</h1>"
 ```
 
-## Verify browser works
-
-```python
-/opt/data/scrapling-venv/bin/python -c "
-from scrapling.fetchers import StealthyFetcher
-p = StealthyFetcher.fetch('https://httpbin.org/get', headless=True, timeout=30000)
-print(f'Status: {p.status}')
-"
-```
+Then, end to end: `scrapling extract fetch "https://quotes.toscrape.com/js/" /tmp/out.txt` (1557 bytes = pass).

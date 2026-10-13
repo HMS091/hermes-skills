@@ -1,8 +1,17 @@
 # Bypassing Aggressive Cloudflare (Managed Challenge)
 
+> **Update 2026-10-13:** a managed challenge *can* be solved once the environment is right. With the
+> matching Chromium build, `TMPDIR=/tmp` and a generous timeout, `StealthyFetcher(solve_cloudflare=True)`
+> solved `https://www.scrapingcourse.com/cloudflare-challenge` (managed turnstile → then embedded) in
+> ~2.5 min: status 200, text "You bypassed the Cloudflare challenge! :D". The earlier failure below was
+> caused mainly by a **missing/broken browser build**, not by an impossible challenge. Always give
+> `timeout=120000`+ so the solving loop has room, and retry the site before declaring it unbeatable.
+> Hardest cases (interactive captcha, IP-reputation blocks, no residential proxy) still fail — the
+> sibling-domain trick and the Hermes browser (Browserbase cloud IP) remain the fallbacks.
+
 ## The Problem
 
-Scrapling's `StealthyFetcher` with `solve_cloudflare=True` cannot bypass Cloudflare's **managed challenge** (the most aggressive tier). The symptom is a looping log:
+Scrapling's `StealthyFetcher` with `solve_cloudflare=True` can loop indefinitely on Cloudflare's **managed challenge** (the most aggressive tier). The symptom is a repeating log:
 
 ```
 The turnstile version discovered is "managed"
@@ -10,7 +19,7 @@ Cloudflare page didn't disappear after 10s, continuing...
 Looks like Cloudflare captcha is still present, solving again
 ```
 
-This continues until timeout with no resolution.
+This can continue until timeout with no resolution — that is the failure mode, not a guaranteed outcome.
 
 ## Real-world Example: Saily.com
 

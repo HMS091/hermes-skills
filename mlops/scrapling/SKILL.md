@@ -1,7 +1,9 @@
 ---
 name: scrapling
-description: "Web data extraction and crawling. When user asks to scrape/get/fetch/extract data from a website, use Scrapling FIRST. Hermes browser (navigate/click/snapshot) is ONLY for interactive tasks: login forms, CAPTCHA solving, visual confirmation, or sites needing manual click flows. Auto-select the right fetcher based on site difficulty."
-version: "1.3.0"
+description: "Use when scraping/extracting structured data from a website. Scrapling first (HTTP → JS → stealth); Hermes browser only for interactive flows."
+version: "2.0.0"
+author: hermes-agent
+license: MIT
 triggers:
   - user says scrape, crawl, extract, fetch, get data from, collect, gather
   - user says "this site" plus data/info/content
@@ -9,13 +11,57 @@ triggers:
   - Hermes browser tool fails or returns empty
   - target site has Cloudflare or anti-bot
 metadata:
+  hermes:
+    tags: [scraping, crawling, anti-bot, cloudflare, playwright]
+    related_skills: [blocked-page-recovery, web-research, lightpanda]
   venv: /opt/data/scrapling-venv
   helper: /opt/data/scripts/scrapling_helper.py
+  cli: /usr/local/bin/scrapling (wrapper; also /usr/local/bin/scrapling-mcp)
+  browsers: /opt/data/scrapling-browsers (chromium 1243 = Chrome for Testing 153.0.8010.12)
+  reinstall_browsers: bash /opt/data/scripts/scrapling_install_browsers.sh
+  selftest: bash /opt/data/scripts/scrapling_selftest.sh [--with-cloudflare]
 ---
 
 # Scrapling
 
-Web scraping toolkit. Installed at `/opt/data/scrapling-venv/`. Full feature set: HTTP Fetcher, StealthyFetcher (Cloudflare bypass), DynamicFetcher (JS rendering), Spider (full crawl), CLI, MCP.
+Web scraping toolkit, installed and **verified working** on this box (2026-10-13).
+Installed at `/opt/data/scrapling-venv/`, CLI wrapper at `/usr/local/bin/scrapling`, browsers
+(Chromium 1243 = Chrome for Testing 153.0.8010.12) at `/opt/data/scrapling-browsers`.
+Tool versions: scrapling 0.4.15, playwright/patchright 1.63.0, curl-cffi 0.16.3, mcp 2.3.0.
+Feature set: HTTP Fetcher (curl-cffi impersonation), DynamicFetcher (JS rendering),
+StealthyFetcher (patchright + Cloudflare solving), Spider (full crawl), adaptive selectors, CLI, MCP.
+
+Status: 0.4.15 = newest release on PyPI *and* GitHub (v0.4.15, 2026-08-23), so there is nothing
+newer to upgrade to. What actually needed fixing was the environment (browsers missing, the
+browser fetchers unable to launch, the helper writing empty files) — all fixed and re-tested.
+
+## When to Use
+
+- Any request to **get / scrape / extract / collect data from a URL or website** → this skill first.
+- The target is **JS-rendered, rate-limited, or behind Cloudflare/anti-bot** → the stealth/dynamic fetchers.
+- You need **many pages of one site** (crawl, product list, docs, feeds) → `Spider` or a loop with `Fetcher`.
+- The Hermes browser tool returned empty/blocked content and you just need the data, not interaction.
+- Do **not** use it for: logins, form submits, captcha popups, visual checks, or "what does this page look
+  like" — that is the Hermes browser / Lightpanda path (see the comparison table below).
+
+## Verified working commands (re-run these when in doubt)
+
+```bash
+# no browser: fastest, plain HTTP with browser impersonation
+scrapling extract get "https://quotes.toscrape.com/" /tmp/out.md          # .md/.txt/.html = format
+scrapling extract get --ai-targeted "https://site.com/article" /tmp/a.md  # main content only
+
+# JS-rendered page (headless Chromium)
+scrapling extract fetch "https://quotes.toscrape.com/js/" /tmp/out.txt
+
+# anti-bot / Cloudflare challenge
+scrapling extract stealthy-fetch --solve-cloudflare "https://www.scrapingcourse.com/cloudflare-challenge" /tmp/out.txt
+# -> verified 200 + "You bypassed the Cloudflare challenge!"
+```
+
+Always call the CLI as `scrapling` (the `/usr/local/bin/scrapling` wrapper fixes proxy vars,
+the browsers dir and TMPDIR). Calling `/opt/data/scrapling-venv/bin/scrapling` directly bypasses
+those fixes and will fail on browser commands.
 
 ## AUTO-DECISION: Scrapling vs Hermes browser
 
@@ -33,6 +79,21 @@ Only use Hermes browser (navigate/click/snapshot/vision) for:
 - **Targeted data extraction** via browser_console JS when snapshots are truncated
 
 Otherwise: Scrapling is faster, cheaper, and more reliable.
+
+### Where Scrapling sits next to the other fetching tools (complementary, not competing)
+
+| Need | Use | Why |
+|---|---|---|
+| Static page / JSON / RSS / bulk text extraction | **Scrapling `Fetcher`** (curl-cffi impersonation) | fastest, no browser, TLS fingerprint looks like Chrome |
+| JS-rendered page, one-off | **Scrapling `DynamicFetcher`** | renders JS, returns DOM + `markdown()` |
+| Cloudflare / anti-bot wall | **Scrapling `StealthyFetcher --solve-cloudflare`** | patchright stealth + turnstile solving (verified) |
+| Many pages of one site, structured crawl | **Scrapling `Spider`** | concurrency, resume, item export |
+| Full local headless browser, interactive stepping (click/fill) | **Lightpanda MCP** (`mcp_lightpanda_*`) | real browser semantics, low memory |
+| Login flows, CAPTCHA, visual check, cloud/anti-bot-as-a-service | **Hermes browser (`browser_exec`, Browserbase)** | cloud IP + human-in-the-loop |
+| Chinese sites that 0-byte Scrapling/curl | **Hermes browser** or `cn.bing.com` via browser snapshot | see caveat below |
+
+Rule of thumb: **extract data → Scrapling; interact with a page → browser/Lightpanda.**
+Scrapling is the cheapest (no browser process) and the only one here that solves Cloudflare locally.
 
 ### ⚠️ EXCEPTION: Chinese websites (百度/36kr/知乎/163等) and Chinese search engines
 
@@ -101,7 +162,7 @@ Combine with `browser_scroll` to reveal more content before extracting.
 
 ## PITFALL: Aggressive Cloudflare (managed challenge)
 
-Some sites use Cloudflare's **managed challenge** (the most aggressive tier). StealthyFetcher with `solve_cloudflare=True` may loop 5+ times printing:
+StealthyFetcher with `solve_cloudflare=True` prints a loop while working:
 
 ```
 The turnstile version discovered is "managed"
@@ -109,7 +170,13 @@ Cloudflare page didn't disappear after 10s, continuing...
 Looks like Cloudflare captcha is still present, solving again
 ```
 
-This loop continues until timeout. **StealthyFetcher cannot bypass managed Cloudflare challenges** in this environment (no residential proxies, Chrome version may mismatch).
+**Verified 2026-10-13:** with the matching browser build + `TMPDIR=/tmp` this loop *resolves* —
+the `www.scrapingcourse.com/cloudflare-challenge` page (managed turnstile) returned 200 and the
+page text "You bypassed the Cloudflare challenge! :D" after ~2.5 min. Give it
+`--timeout 120000`+ (CLI: `--timeout 120000`), not the 30 s default, or it will time out mid-loop.
+It still fails on the hardest CF configurations (interactive captcha, fingerprinting by IP
+reputation) — there is no residential proxy available here. Fall back to the Hermes browser
+(Browserbase cloud IP) in that case.
 
 ### Technique: Sibling domain bypass
 
@@ -120,16 +187,41 @@ When a site has aggressive Cloudflare, look for sibling/related domains from the
 - **Affiliate/partner portals**: `surfshark.com/affiliate` was accessible while `saily.com` was not
 - **Web archives**: Wayback Machine (`web.archive.org`) may have cached versions without Cloudflare
 
-### Chrome binary version mismatch
+## PITFALL: browser build missing / wrong dir (the #1 cause of browser-fetcher failure)
 
-The installed Playwright/Patchright expects Chrome for Testing 148.x (chromium-1223), but the system has Chrome 149.x at `/opt/data/home/.agent-browser/browsers/chrome-149.0.7827.54/chrome`. Symlinking the newer Chrome to the expected path may let the browser launch but can cause Cloudflare bypass failures. To fix properly, install the exact expected version or update Patchright to match.
+Symptom: `Executable doesn't exist at .../chromium-<rev>/chrome-linux64/chrome` plus the
+"Looks like Playwright was just installed or updated" banner, from DynamicFetcher, StealthyFetcher,
+the CLI `fetch`/`stealthy-fetch`, **or** `BrowserType.launch_persistent_context: Page crashed`.
+
+Two independent traps on this box:
+
+1. **Wrong browsers dir.** A Hermes session exports `PLAYWRIGHT_BROWSERS_PATH=/opt/hermes/tools`
+   (that is the Hermes browser tool's Chromium 1208). Scrapling's browsers live in
+   `/opt/data/scrapling-browsers` (currently Chromium **1243**). The `/usr/local/bin/scrapling` wrapper
+   and the helper script **force** the right path; direct `python -c` calls must set it themselves
+   (`os.environ['PLAYWRIGHT_BROWSERS_PATH'] = '/opt/data/scrapling-browsers'`). Never write
+   `${PLAYWRIGHT_BROWSERS_PATH:-/opt/data/scrapling-browsers}` or `.get(...) or default` — the session's
+   value is already set (and wrong), so both silently keep the bad path and the browsers "disappear".
+2. **Chromium crash from shared memory.** `/dev/shm` is only 64 MB and the Hermes scratch dir
+   (`/opt/data/cache/scratch`) is not usable for Chrome's shm files (EACCES) — the page process
+   crash-loops. Fix: `TMPDIR=/tmp` + launch flag `--disable-dev-shm-usage` (both bundle into the
+   wrapper/helper; pass `extra_flags=['--disable-dev-shm-usage','--no-sandbox']` in raw Python).
+
+Repair or reinstall the browsers (handles any future revision):
 
 ```bash
-# Symlink workaround (launches but may fail Cloudflare):
-target="/opt/hermes/.playwright/chromium-1223/chrome-linux64/chrome"
-mkdir -p "$(dirname "$target")"
-ln -sf /opt/data/home/.agent-browser/browsers/chrome-149.0.7827.54/chrome "$target"
+bash /opt/data/scripts/scrapling_install_browsers.sh
 ```
+
+The **Playwright CDN is blocked here** (cdn.playwright.dev / playwright.azureedge.net time out) — the
+script points `PLAYWRIGHT_DOWNLOAD_HOST` at `https://cdn.npmmirror.com/binaries/playwright`, which
+mirrors the same `builds/cft/<chrome version>/<platform>/...` paths (verified for Chromium 1223 =
+Chrome for Testing 148.0.7778.96 and Chromium 1243 = CFT 153.0.8010.12). huaweicloud mirrors
+`builds/chromium/*` but serves HTML for `builds/cft/*`, so it is not a drop-in host.
+
+`playwright install` also garbage-collects browser revisions it no longer knows about — the old
+`chromium-1223` directory was removed automatically when playwright went to 1.63/1243. After any
+playwright/patchright upgrade, re-run the installer script, then the self-test.
 
 ## PITFALL: Proxy env vars break curl-cffi
 
@@ -159,62 +251,114 @@ ModuleNotFoundError: No module named 'scrapling'
 
 Or bypass the helper entirely — use direct Python (preferred for complex extractions).
 
-## Installation Paths
-- venv: `/opt/data/scrapling-venv/`
-- Python: `/opt/data/scrapling-venv/bin/python`
-- CLI: `/usr/local/bin/scrapling` (proxy-safe wrapper)
-- Helper: `/opt/data/scripts/scrapling_helper.py`
-- Browsers: chromiun-1223 chrome-headless-shell under Playwright driver dir
-- Skill: scrapling in Hermes skill library
+## PITFALL: `page.text` is empty (returns '')
 
-## Quick CLI Usage
+In scrapling 0.4.x, `Response.text` is **empty** for normal HTML pages — `len(page.text) == 0` even
+on a 200 response (verified on quotes.toscrape.com and example.com). Any code that does
+`f.write(page.text)` writes an empty file. This is exactly what broke the v1 helper script.
+
+Use instead:
+
+```python
+page.get_all_text()   # visible text of the page
+page.html_content     # full HTML (str)
+page.body             # raw bytes
+page.markdown()       # markdown of the rendered DOM (method, not property)
+page.css('title::text').get()
+```
+
+## PITFALL: scrapling MCP server needs mcp >= 2.0 (FIXED — mcp 2.3.0 installed)
+
+`scrapling mcp` / `/usr/local/bin/scrapling-mcp` fails with
+`ImportError: cannot import name 'MCPServer' from 'mcp.server'` when the venv has `mcp` 1.x
+(the class only exists in mcp 2.x). Fixed on 2026-10-13 by installing the `ai` extra; verified with a
+real stdio handshake (`initialize` + `tools/list` returns the scrapling tools).
+
+If it ever regresses, upgrade inside the venv — never with system pip:
 
 ```bash
-scrapling extract get "https://example.com" page.md
-scrapling extract stealthy-fetch "https://site.com" data.txt --solve-cloudflare
-scrapling extract fetch "https://spa-site.com" content.md --network-idle
+/opt/hermes/tools/uv-0.12.3-linux-x64/uv pip install --python /opt/data/scrapling-venv/bin/python \
+  --default-index https://mirrors.aliyun.com/pypi/simple/ -U 'scrapling[fetchers,ai]'
 ```
 
-## Python Usage (via Hermes terminal)
+`uv` is **not** on PATH here — the binary lives at `/opt/hermes/tools/uv-0.12.3-linux-x64/uv`, and the
+venv has no pip (`python -m ensurepip` is the only fallback). Straight PyPI downloads from this network
+crawl at ~250 KB/s; the Aliyun index (`--default-index https://mirrors.aliyun.com/pypi/simple/`) is
+several times faster for the 100 MB+ playwright/patchright wheels.
 
-❗ Always use `/opt/data/scrapling-venv/bin/python` — the helper script uses system Python and will fail with ModuleNotFoundError.
+MCP is still optional: the CLI + helper path needs no MCP server. Registering it with Hermes
+(`hermes mcp add scrapling --command /usr/local/bin/scrapling-mcp --connect-timeout 60 --args`, then
+restart) is the one step that needs the agent's config file, which it cannot edit itself.
 
-```python
-from hermes_tools import terminal
+Its 13 tools, for reference: `open_session`, `open_request_session`, `close_session`, `list_sessions`,
+`make_request`, `bulk_get`, `fetch`, `bulk_fetch`, `stealthy_fetch`, `bulk_stealthy_fetch`,
+`session_fetch`, `session_make_request`, `screenshot`.
 
-# Basic fetch (use venv Python)
-r = terminal('/opt/data/scrapling-venv/bin/python /opt/data/scripts/scrapling_helper.py fetch "https://example.com"')
+## Installation Paths
+- venv / Python: `/opt/data/scrapling-venv/bin/python`
+- CLI: `/usr/local/bin/scrapling` (wrapper: unsets proxies, pins browsers dir + TMPDIR; source of truth
+  is `/opt/data/scripts/scrapling_cli_wrapper.sh`, reinstall with `install -m 0755 <src> /usr/local/bin/scrapling`)
+- MCP wrapper: `/usr/local/bin/scrapling-mcp`
+- Browsers: `/opt/data/scrapling-browsers/{chromium-1243,chromium_headless_shell-1243}`
+- Helper v2: `/opt/data/scripts/scrapling_helper.py` (v1 kept as `scrapling_helper.v1.py.bak`)
+- Browser installer: `/opt/data/scripts/scrapling_install_browsers.sh`
+- Self-test (6 checks, `--with-cloudflare` for the slow one): `bash /opt/data/scripts/scrapling_selftest.sh`
+- Package baseline snapshot: `/opt/data/scripts/scrapling_venv_baseline_20261013.txt` (68 packages, pre-upgrade — use it to pin back if an upgrade regresses)
 
-# Stealthy with Cloudflare bypass
-r = terminal('/opt/data/scrapling-venv/bin/python /opt/data/scripts/scrapling_helper.py stealthy "https://site.com" --css ".content"')
+## Quick CLI Usage (preferred entry point)
 
-# Dynamic (JS rendering)
-r = terminal('/opt/data/scrapling-venv/bin/python /opt/data/scripts/scrapling_helper.py dynamic "https://site.com" --output /tmp/page.md')
-
-# Parse offline HTML
-r = terminal('/opt/data/scrapling-venv/bin/python /opt/data/scripts/scrapling_helper.py parse /tmp/page.html --css "h1" --css ".price"')
+```bash
+scrapling extract get "https://example.com" /tmp/page.md              # .md / .txt / .html select the format
+scrapling extract get -s ".price" "https://shop.com" /tmp/prices.txt   # CSS selector, repeatable
+scrapling extract get --ai-targeted "https://news.site/x" /tmp/a.md   # main content only
+scrapling extract fetch "https://spa-site.com" /tmp/content.md --network-idle --timeout 60000
+scrapling extract stealthy-fetch --solve-cloudflare "https://cf-site.com" /tmp/data.txt --timeout 120000
+scrapling shell                                                     # interactive console (needs IPython)
 ```
 
-## Python Usage (direct)
+Browser commands: `--timeout` is **milliseconds** and the default 30 s is too short for
+Cloudflare solving or heavy SPAs — pass 60000–120000.
+
+## Python usage
+
+Two options, both must pin the environment (browsers dir + TMPDIR) or the browser fetchers fail:
+
+**A. Helper script v2** (handles the env, proxies and browser flags for you) — always the venv python:
+
+```bash
+/opt/data/scrapling-venv/bin/python /opt/data/scripts/scrapling_helper.py fetch    "https://example.com" -f markdown -o /tmp/page.md
+/opt/data/scrapling-venv/bin/python /opt/data/scripts/scrapling_helper.py dynamic  "https://spa.com" -s ".item" -s ".price" -o /tmp/items.txt
+/opt/data/scrapling-venv/bin/python /opt/data/scripts/scrapling_helper.py stealthy "https://cf-site.com" --solve-cloudflare -o /tmp/cf.txt
+/opt/data/scrapling-venv/bin/python /opt/data/scripts/scrapling_helper.py parse    /tmp/page.html -s "h1" -s ".price" -o /tmp/out.json
+```
+
+Flags: `-s/--css` (repeatable), `-f/--format text|html|markdown`, `-o/--output`, `--timeout` (seconds),
+`--solve-cloudflare` (stealthy only). Writes `# status=... url=...` to stderr so stdout stays clean.
+
+**B. Direct Python** (for non-trivial logic; keeps working after the helper changes):
 
 ```python
-import os, sys
-for k in ['http_proxy','https_proxy','HTTP_PROXY','HTTPS_PROXY']:
+import os
+for k in ('http_proxy','https_proxy','HTTP_PROXY','HTTPS_PROXY','all_proxy','ALL_PROXY'):
     os.environ.pop(k, None)
+os.environ['PLAYWRIGHT_BROWSERS_PATH'] = '/opt/data/scrapling-browsers'  # never leave this to the session env
+os.environ['TMPDIR'] = '/tmp'
 
-sys.path.insert(0, '/opt/data/scrapling-venv/lib/python3.13/site-packages')
-from scrapling.fetchers import Fetcher, StealthyFetcher, DynamicFetcher
+from scrapling.fetchers import Fetcher, DynamicFetcher, StealthyFetcher
 
-# Basic - fastest
-p = Fetcher.get('https://example.com', timeout=15)
-title = p.css('title::text').get()
+p = Fetcher.get('https://example.com', timeout=20)            # fast path, no browser
+print(p.status, p.css('h1::text').get(), len(p.get_all_text()))
 
-# Cloudflare bypass - uses headless Chrome
-p = StealthyFetcher.fetch('https://protected.site.com', headless=True, solve_cloudflare=True, timeout=60000)
+p = DynamicFetcher.fetch('https://spa.com', headless=True, network_idle=True, timeout=60000,
+                         extra_flags=['--disable-dev-shm-usage', '--no-sandbox'])
 
-# JS rendering
-p = DynamicFetcher.fetch('https://spa-site.com', headless=True, network_idle=True, timeout=45000)
+p = StealthyFetcher.fetch('https://cf-site.com', headless=True, solve_cloudflare=True, timeout=120000,
+                          extra_flags=['--disable-dev-shm-usage', '--no-sandbox'])
 ```
+
+Run that snippet with `/opt/data/scrapling-venv/bin/python` (or `python -c`), **not** system python.
+
+
 
 ## Spider Framework
 

@@ -1,6 +1,6 @@
 {
-  "last_updated": "2026-09-14",
-  "notes": "人工/agent 核查后的工具清单。系统 python3 没有 pip，包都装在专用 venv 里 — 检测版本必须用对应 venv 的 python（importlib.metadata），用系统 pip show 会误报'未安装'。",
+  "last_updated": "2026-10-13",
+  "notes": "人工/agent 核查后的工具清单。系统 python3 没有 pip，包都装在专用 venv 里 — 检测版本必须用对应 venv 的 python（importlib.metadata），用系统 pip show 会误报'未安装'。uv 不在 PATH：/opt/hermes/tools/uv-0.12.3-linux-x64/uv。PyPI 直连在中国只有 ~250KB/s，装大包用 --default-index https://mirrors.aliyun.com/pypi/simple/。",
   "tools": [
     {
       "name": "Hermes Agent",
@@ -14,14 +14,18 @@
     {
       "name": "Scrapling",
       "type": "venv (uv 创建, 无 pip)",
-      "installed_version": "0.4.15",
+      "installed_version": "0.4.15 (= PyPI 与 GitHub 最新发布 v0.4.15)",
       "location": "/opt/data/scrapling-venv",
       "python": "/opt/data/scrapling-venv/bin/python",
-      "deps": "curl_cffi, playwright 1.60, patchright, browserforge, msgspec (StealthyFetcher/DynamicFetcher 可导入)",
+      "deps": "playwright 1.63.0, patchright 1.63.0, curl-cffi 0.16.3, mcp 2.3.0, browserforge, msgspec, lxml 6.x",
+      "browsers": "/opt/data/scrapling-browsers (chromium-1243 = Chrome for Testing 153.0.8010.12, 约 660MB)",
+      "cli": "/usr/local/bin/scrapling + /usr/local/bin/scrapling-mcp (wrapper: 去代理变量 + 强制 PLAYWRIGHT_BROWSERS_PATH + TMPDIR=/tmp)",
+      "helper": "/opt/data/scripts/scrapling_helper.py v2 (必须用 venv python 调用)",
+      "selftest": "bash /opt/data/scripts/scrapling_selftest.sh [--with-cloudflare]  (6 项检查)",
+      "reinstall_browsers": "bash /opt/data/scripts/scrapling_install_browsers.sh (走 npmmirror, 官方 Playwright CDN 被墙)",
       "version_check": "/opt/data/scrapling-venv/bin/python -c \"import importlib.metadata as m; print(m.version('scrapling'))\"",
-      "update_cmd": "/usr/local/bin/uv pip install --python /opt/data/scrapling-venv/bin/python -U scrapling",
-      "helper": "/opt/data/scripts/scrapling_helper.py (必须用 venv python 调用)",
-      "notes": "2026-09-14 实测 Fetcher.get 200 + CSS 解析正常；helper fetch 正常"
+      "update_cmd": "/opt/hermes/tools/uv-0.12.3-linux-x64/uv pip install --python /opt/data/scrapling-venv/bin/python --default-index https://mirrors.aliyun.com/pypi/simple/ -U 'scrapling[fetchers,ai]'",
+      "notes": "2026-10-13 全链路实测通过: Fetcher(HTTP) / DynamicFetcher(JS) / StealthyFetcher+Cloudflare managed challenge(200 'You bypassed...') / CLI extract get|fetch|stealthy-fetch / helper v2 / MCP tools-list。升级 playwright 后浏览器 revision 会变且旧版会被自动清理，必须重跑 reinstall_browsers。注意 Hermes 会话会把 PLAYWRIGHT_BROWSERS_PATH 设为 /opt/hermes/tools（那是 Hermes browser 自己的 Chromium 1208），wrapper 与 helper 已强制覆盖；写 `:-` 或 `or default` 会静默失效。"
     },
     {
       "name": "MinerU (magic-pdf)",
@@ -50,6 +54,13 @@
       "installed_version": null,
       "version_check": "importlib.metadata.version('whisperx')",
       "notes": "未安装 — 带说话人分离的转写"
+    },
+    {
+      "name": "Lightpanda",
+      "type": "binary + Hermes MCP",
+      "installed_version": "nightly @ /opt/lightpanda/lightpanda",
+      "mcp": "config.yaml mcp_servers.lightpanda (enabled: false), 31 个 mcp_lightpanda_* 工具",
+      "notes": "本地无头浏览器, 快且省内存; Beta 不稳定、无 stealth 反爬、CORS 未实现 — 反爬站点用 Scrapling StealthyFetcher 或 Hermes browser。Telemetry 已关。改动需重启 Hermes 生效。"
     },
     {
       "name": "Understand Anything",
