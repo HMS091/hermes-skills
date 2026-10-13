@@ -2,6 +2,10 @@
 
 这个仓库用来在多台设备之间同步 Hermes Agent 的技能（Skills），**仓库已公开**，任何 Agent / 设备都可以直接拉取使用。
 
+> ⚠️ **授权提示（按目录分别授权，不是一个整体）**
+> `product-management/` 目录是第三方作品，来自 [deanpeters/Product-Manager-Skills](https://github.com/deanpeters/Product-Manager-Skills)（v0.84，作者 Dean Peters），采用 **CC BY-NC-SA 4.0**：署名、**禁止商业使用**、改编需同方式共享。详见该目录下的 `ATTRIBUTION.md` 与 `LICENSE-CC-BY-NC-SA-4.0.txt`。
+> 该目录是**独立聚合**，不改编、不影响仓库内其他自制技能的授权；但**不要把本目录内容用于任何商业产品或付费交付**。
+
 ## 本机（已配置好）
 
 - ✅ 每小时自动推送技能更新到 GitHub
