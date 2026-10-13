@@ -1,7 +1,7 @@
 ---
 name: native-mcp
 description: "MCP client: connect servers, register tools (stdio/HTTP)."
-version: 1.0.0
+version: 1.1.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -347,6 +347,22 @@ mcp_servers:
 Servers can also include `tools` in sampling requests for multi-turn tool-augmented workflows. The `max_tool_rounds` config prevents infinite tool loops. Per-server audit metrics (requests, errors, tokens, tool use count) are tracked via `get_mcp_status()`.
 
 Disable sampling for untrusted servers with `sampling: { enabled: false }`.
+
+## Pre-Registration Audit (third-party / viral servers)
+
+Registration is persistent and needs a restart, so a bad entry costs a restart plus a tool table full of calls that only error out. Audit before editing `mcp_servers`.
+
+1. **Enumerate the catalog out of band** — run `scripts/mcp_stdio_probe.py` (in this skill) against the exact command you intend to register:
+
+   ```bash
+   python3 scripts/mcp_stdio_probe.py --json /tmp/catalog.json -- npx -y some-pkg@1.2.3 mcp
+   ```
+
+   It performs `initialize` → `notifications/initialized` → `tools/list` and prints the authoritative count, names and descriptions. Marketing and README counts are routinely stale — never quote one you did not observe.
+2. **Read the readiness gate before registering** — if the server ships a `doctor` / `check` / `--dry-run` subcommand, run it read-only first and read its host-support classification and `remediation` strings. Servers whose native engine or platform gate fails still connect and register; the failure only surfaces at call time.
+3. **Pin the exact version** in `args` (`pkg@1.2.3`). This matches how vendor setup commands pin registrations, so a later `@latest` cannot silently change the tool surface under a running agent.
+4. **Never run a vendor's `setup`/`install` during evaluation** — those rewrite `config.yaml`, create backup snapshots, and expect a restart. Install into a scratch prefix, then register by hand once the decision is made.
+5. **The server process is not the engine** — wrappers shell out to Ghidra/Hopper/IDA/JADX/binwalk/etc. Registering the MCP entry does not install those; confirm each external dependency from the server's own readiness output before promising the capability.
 
 ## Notes
 

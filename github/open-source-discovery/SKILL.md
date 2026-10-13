@@ -1,7 +1,7 @@
 ---
 name: open-source-discovery
 description: "Find and evaluate open-source projects on GitHub for reuse/modification — search strategies, quality assessment, red-flag detection, README verification, and project comparison. For users who want ready-made code to modify and deploy."
-version: 2.2.0
+version: 2.3.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos]
@@ -778,9 +778,79 @@ When reporting back to the user, use this format:
 
 ---
 
+## 11. Viral Agent-Tool / MCP-Server Evaluation (Install-and-Probe)
+
+Trigger: the user drops a link to a trending repo / "skill" / MCP server ("I saw this on GitHub, is it any good, what does it give you?") and wants a verdict **before** anything is installed. These ship as a CLI + MCP server, so the README cannot be the evidence — reproduce every claim locally, read-only. Run the phases in order; skip ahead only when a phase already settles the verdict.
+
+### Phase 1 — Hype audit (do this before reading the feature list)
+
+```bash
+curl -s "https://api.github.com/repos/OWNER/REPO" | python3 -c "
+import json,sys;r=json.load(sys.stdin)
+s=r['stargazers_count'];f=r['forks_count']
+print(f'stars {s} forks {f} fork:star {f/s*100:.0f}% watchers {r[\"subscribers_count\"]}')
+print('created',r['created_at'][:10],'pushed',r['pushed_at'][:10],'issues',r['open_issues_count'])"
+```
+
+- **fork:star above ~20% is a hype marker, not endorsement** — healthy repos sit at 5–15%. Cross-check `subscribers_count`: six-figure stars with a few hundred watchers is attention, not users.
+- Growth-hack tells: YouTube/Instagram/TikTok "clone any X in minutes", star-growth charts as the primary proof, "comment X for the guide" funnels. When these exist, treat the repo's own feature list as marketing copy.
+- Independent hands-on teardowns outrank star charts. Search for a neutral "what it actually does" review — especially one that compared the tool against a bare agent on the same task.
+- Star *history* needs auth: `GET /repos/{o}/{r}/stargazers` with `Accept: application/vnd.github.star+json` returns 401 anonymously. Don't burn calls on it; infer tempo from creation date, release cadence, and issue/PR activity.
+
+### Phase 2 — Wrapper or new technology?
+
+Read the package manifest, not the pitch. Heavy deps on `@modelcontextprotocol/*`, `playwright-core`, parsers, asar/archive libs, plus README text naming Ghidra / Hopper / IDA / JADX / binwalk / tshark, means a **connector** that wires an agent into existing tools. Say that plainly in the report: the value is workflow and evidence discipline, not a new algorithm. Check `dependencies` compiled into a clean release, not `devDependencies`.
+
+### Phase 3 — Install read-only into a scratch prefix
+
+Never run the vendor's `setup` / `install` / `init` while evaluating: those rewrite agent config (`config.yaml`), pin registrations, back up files, and demand a client restart. Install beside the project and drive the binary directly:
+
+```bash
+npm install <pkg> --prefix "$BH_AGENT_WORKSPACE/<name>" --no-audit --no-fund
+"$BH_AGENT_WORKSPACE/<name>/node_modules/.bin/<bin>" --version
+```
+
+Read that package's `package.json` (`engines`, `scripts`, `os`, `cpu`) for what it wraps and what runtime it needs. `engines` mismatches and missing native engines are the usual reason a tool "supports" a platform on paper only.
+
+### Phase 4 — Read the readiness verdict instead of guessing it
+
+```bash
+<bin> doctor --json        # or preflight / check / --dry-run equivalents
+```
+
+The tool's host-support classification and `remediation` strings are the answer to "does this run on this machine". Quote its own classification verbatim (e.g. `unsupported_host`) plus its supported-host list — never assert platform support from a README. Sort capabilities into three tiers and report them as such:
+
+| Tier | Meaning | How to prove it |
+|---|---|---|
+| works with no extra install | static analysis, archive/package parsing, browser capture | smoke test it now |
+| works after the user installs a named dependency/engine | the remediation field names it | state the install cost |
+| blocked on this host | host gate excludes it | name the host that would work |
+
+### Phase 5 — Enumerate the real tool catalog
+
+Advertised counts are stale. Enumerate `tools/list` for an MCP server with `scripts/mcp_stdio_probe.py` in the `native-mcp` skill; use `--help` / `capabilities` subcommands for CLIs. Report the count you observed, not the one the site advertises.
+
+### Phase 6 — Smoke-test one capability end to end
+
+Build a synthetic fixture that exercises the capability needing no extra engine (minimal app dir, sample archive, tiny bundle) and run the tool on it. Report extracted facts, never adjectives: "synthetic Electron app → 1 contextBridge, 2 exposed members, 4 IPC ops, 2 literal channels, 19 findings, sha256-pinned evidence id, 7 s". A reproduced count is the only claim that survives scrutiny.
+
+### Reporting Shape (this user)
+
+Lead with the verdict, then the evidence — Chinese, tables over prose, negative findings explicit:
+
+1. **结论先行** — one paragraph: real tool or hype, and how much of it works on *his* hardware today.
+2. 它到底是什么 — wrapper vs new tech, real version, observed tool count, license, repo metrics.
+3. 真实能力 — what the agent can now do, each bullet tied to a tested capability.
+4. 在你这台机器上的实测结果 — ✅/❌ table per check, including the host gate and the smoke test.
+5. 成本与风险 — engine license fees the tool does NOT provide (Hopper/IDA are paid; a wrapper grants no key), EULA/legal exposure of the intended use case, hype-vs-substance, and whether the workload even matches the user's projects.
+6. 建议 + one immediately executable next step.
+
+Do not register anything into the agent config during an evaluation. Register only after the host gate passes, and state the cost up front: a restart drops the session/gateway connection, and tools whose engine gate fails still register and then return provider-unavailable errors on every call, polluting the tool table.
+
 ## References
 
 See `references/ai-llm-ecosystem-survey-202606.md` for the comprehensive AI/LLM open-source landscape survey across 8 categories.
+See `scripts/mcp_stdio_probe.py` in the `native-mcp` skill for the stdio `tools/list` probe used in section 11.
 See `references/customer-support-systems-202606.md` for the solopreneur customer support system survey (Freescout, Chatwoot, etc.).
 See `references/warp-clash-api-viability-202607.md` for a practical case study of viability assessment on an archived Cloudflare WARP+ project (API endpoint testing, issue comment mining, GFW blocking analysis).
 
@@ -820,3 +890,6 @@ See `references/warp-clash-api-viability-202607.md` for a practical case study o
     - `docker ps` for Docker daemon (container-in-container may not have /var/run/docker.sock)
     - Python version compatibility (3.13 may break some packages)
     - Memory pressure with `free -h` before large model downloads
+
+15. **fork:star above ~20% marks hype, not adoption** — healthy repos sit at 5–15%. Check `subscribers_count` alongside stars, and quote an independent hands-on test before the repo's own feature list. Star charts trend on attention, which is not the same as a working tool.
+16. **Never quote a vendor's tool or feature count** — enumerate it (`tools/list` for MCP servers, `--help`/`capabilities` for CLIs). A stale number in the report discredits the tested findings next to it.
