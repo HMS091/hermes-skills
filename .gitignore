@@ -5,3 +5,7 @@
 .hub/
 .usage.json
 .usage.json.lock
+
+# runtime locks & ledgers (not skills)
+.locks/
+.curator_ledger.jsonl
