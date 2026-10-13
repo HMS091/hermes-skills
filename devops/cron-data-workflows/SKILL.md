@@ -260,6 +260,12 @@ cronjob(
 
 **When to use no_agent=True:** Memory/disk/GPU watchdogs, threshold alerts, heartbeats, CI notifications, API pollers with fixed output shape, and any cron job where the script itself produces the exact text the user should see.
 
+**Verify a watchdog before trusting it** — silence is indistinguishable from “never fired”:
+
+1. **Prove both paths.** Run the script directly (healthy → exit 0 + EMPTY stdout), then re-run a copy with one deliberately broken input (point a path/var at a nonexistent target) and confirm the alert text renders and the exit code is non-zero. A watchdog whose alert branch was never executed is a liability, not an alert.
+2. **Point `deliver` at somewhere the user actually reads.** `deliver='local'` saves failures to `cron/output/<job_id>/` where nobody sees them — for a breakage monitor that is a silent no-op. After a fire, confirm via `cronjob(action='list')`: `last_status: ok` + “silent (empty output)” = healthy; anything else deserves a look at `last_error` / `last_delivery_error`.
+3. **Fold in version drift.** For upgrade watchdogs, also compare the installed version against the upstream source (PyPI JSON, GitHub `releases/latest`) and stay silent only when there is nothing actionable — that single script then reports both “it broke” and “there's a new one”.
+
 **When to use the default LLM mode:** Anything that needs reasoning — summarizing a feed, drafting a briefing, picking interesting items from a batch, following conditional logic based on content.
 
 ### Proxy Auto-Fallback

@@ -20,6 +20,7 @@ metadata:
   browsers: /opt/data/scrapling-browsers (chromium 1243 = Chrome for Testing 153.0.8010.12)
   reinstall_browsers: bash /opt/data/scripts/scrapling_install_browsers.sh
   selftest: bash /opt/data/scripts/scrapling_selftest.sh [--with-cloudflare]
+  healthcheck: /opt/data/scripts/scrapling_healthcheck.sh (cron 「Scrapling 健康检查」每日 00:30 UTC, deliver=all; 健康时静默, 只报故障与新版本)
 ---
 
 # Scrapling

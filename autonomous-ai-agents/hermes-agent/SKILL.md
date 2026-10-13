@@ -1048,6 +1048,45 @@ Common gateway problems:
 ### Gateway logs
 `~/.hermes/logs/gateway.log`
 
+### Dashboard chat pane drops mid-turn / stops updating (WebSocket keepalive)
+
+Symptom: the in-browser chat stops streaming, looks stuck "loading", then reconnects — or the user has to refresh the page. Server side, in `logs/gui.log` / `logs/errors.log`:
+
+```
+websockets.exceptions.ConnectionClosedError: sent 1011 (internal error) keepalive ping timeout
+hermes_cli/web_routers/chat_ws.py:97 in _broadcast_event -> starlette.websockets.WebSocketDisconnect
+ws closed peer=<lan-ip> reason=client_disconnect(code=1006,reason=) messages=1
+```
+
+**Root cause:** on a non-loopback bind uvicorn runs WS ping/pong on a cadence from `dashboard.ws_ping_interval` / `dashboard.ws_ping_timeout` (defaults **20/20s**), and that ping task shares the event loop with the agent. A long tool call (browser launch, big install, heavy parse) starves the loop, uvicorn misses the pong, and it kills a perfectly healthy socket (#53773/#48445/#50005). Loopback binds disable the ping entirely for exactly this reason.
+
+**Fix** — then **restart the dashboard** (uvicorn reads these only at startup):
+
+```bash
+export HERMES_HOME=/opt/data; /opt/hermes/.venv/bin/hermes config set dashboard.ws_ping_interval 60   # stay under the tunnel ~100s idle limit
+/opt/hermes/.venv/bin/hermes config set dashboard.ws_ping_timeout 180                                  # tolerate an event loop stalled for minutes
+```
+
+**Restart hazard:** the dashboard process hosts the chat backend (node `ui-tui` → `tui_gateway`), so restarting it kills any **in-flight turn** — never do it mid-conversation. Schedule it instead (a cron one-shot `in 1m` whose script sleeps, or `bash /opt/data/scripts/dashboard-restart.sh 45`, which kills it, waits for the supervisor to bring it back and logs to `logs/dashboard-restart.log`).
+
+**Find the pid from `/proc`, not `pgrep`.** `pgrep -f "hermes dashboard"` / `"hermes dashboard --host"` NEVER matches: the real cmdline is `python -c ... sys.exit(main()) dashboard --host 0.0.0.0 ...`, so "hermes" and "dashboard" are not contiguous — while the agent's own `bash -c` wrapper (which contains the pattern text plus `hermes-snap-`) DOES match. Match non-contiguous parts against `/proc/<pid>/cmdline` and skip wrappers:
+
+```bash
+for p in $(pgrep -f "dashboard --host"); do
+  cmd=$(tr '\0' ' ' < /proc/$p/cmdline)
+  case "$cmd" in *"hermes-snap-"*|*"eval "*) continue;; esac          # skip Hermes' own wrappers
+  case "$cmd" in *"hermes_cli.main import main"*"dashboard --host"*) echo "$p";; esac
+done
+```
+
+**Verify the effect before reporting success.** A delayed restart that cannot find its process exits 0 with a friendly line — indistinguishable from a successful one unless you read the log it writes (`logs/dashboard-restart.log`, or `cron/output/<job_id>/` for cron-run scripts). Config-only fixes stay invisible until the process actually restarts: "设置已写入" is not "已生效" — re-read the value through the loader AND confirm the pid/uptime changed.
+
+The container's `/opt/start.sh` supervisor only restarts the dashboard **3 times** (`for i in 1 2 3`); after that a crash leaves the UI permanently dead. `while true` is the durable form — that file sits outside the agent's write-safe root (`HERMES_WRITE_SAFE_ROOT=/opt/data`), so it needs a manual edit.
+
+### Terminal text looks bigger / is clipped at the right edge
+
+The in-browser terminal font is **width-driven and hardcoded in the UI bundle** (`<300px→7px … 720–1024→12px, ≥1024px→14px`, line-height 1.02/1.15), so widening the browser jumps the size — there is no config knob for it. Right-edge clipping is a **column desync** between the PTY/node TUI and xterm: the client resolves it by reloading the page (plus Ctrl+0 if the page was zoomed), and a fresh PTY re-negotiates columns on reconnect. Never "fix" either symptom with CSS `font-size`/`line-height` on `.xterm-rows` — the cell metrics were already measured, so bigger glyphs overlap horizontally and overflow the pane (that warning is written into `custom.css` itself).
+
 ### Dashboad/Web UI cannot select/copy text
 
 Dashboard (the Web UI running on `hermes dashboard`) renders agent responses through `ui-tui`, an Ink/React-based terminal emulator, **not native HTML**. The text is drawn as character cells on a pixel canvas — you can't select or copy it with the mouse.

@@ -74,10 +74,11 @@ git push -u origin main
 # Auto-sync Hermes skills to GitHub (HTTPS + token)
 # Runs every hour via cron
 
-set -e
+set -uo pipefail
 
 SKILLS_DIR="/opt/data/skills"
-cd "$SKILLS_DIR"
+BRANCH="main"
+cd "$SKILLS_DIR" || { echo "❌ 找不到 $SKILLS_DIR"; exit 1; }
 
 # Load GitHub token
 source /opt/data/.env_bot 2>/dev/null || {
@@ -89,13 +90,34 @@ if [ -n "$GH_BOT_TOKEN" ]; then
     git remote set-url origin "https://HMS091:${GH_BOT_TOKEN}@github.com/HMS091/hermes-skills.git"
 fi
 
-# Check if there are any changes
-if ! git diff --quiet --exit-code || ! git diff --cached --quiet --exit-code; then
+# 1. 有变更就提交（含**未跟踪**文件 —— 只 diff 已跟踪文件会漏掉新建的 skill）
+changed=0
+if ! git diff --quiet --exit-code \
+   || ! git diff --cached --quiet --exit-code \
+   || [ -n "$(git ls-files --others --exclude-standard)" ]; then
     git add -A
-    git commit -m "auto-sync $(date '+%Y-%m-%d %H:%M')"
-    # HTTPS push — no SSH/GFW issue
-    git push origin main 2>&1 || echo "Push failed (may be transient)"
+    git commit -q -m "auto-sync $(date '+%Y-%m-%d %H:%M')" && changed=1
 fi
+
+# 2. 先拉远端（别的 Hermes 实例可能推过），再 rebase —— 少了这步 push 会永久 fetch first 失败
+if ! git fetch -q origin "$BRANCH" 2>/dev/null; then
+    echo "❌ skills 同步失败：git fetch 失败（GitHub 连不上 / token 失效）"; exit 1
+fi
+if ! git rebase "origin/$BRANCH" >/tmp/skills-sync-rebase.log 2>&1; then
+    git rebase --abort 2>/dev/null
+    echo "❌ skills 同步失败：rebase 冲突，已回滚，本地改动未丢"; tail -n 5 /tmp/skills-sync-rebase.log; exit 1
+fi
+
+# 3. 该推就推；无待推提交则静默退出（cron 不推送空输出）
+ahead=$(git rev-list --count "origin/$BRANCH..HEAD" 2>/dev/null || echo 0)
+if [ "$ahead" = "0" ]; then
+    [ "$changed" = "1" ] && echo "ℹ️ 已提交但仍与远端一致（无待推提交）"
+    exit 0
+fi
+if ! git push -q origin "$BRANCH" 2>&1; then
+    echo "❌ skills 同步失败：git push 被拒（远端 HEAD 已变，或 token 无权限）"; exit 1
+fi
+echo "✅ skills 已同步到 GitHub：$ahead 个提交 @ $(date '+%Y-%m-%d %H:%M')"
 ```
 
 ```bash
@@ -106,7 +128,9 @@ chmod +x /opt/data/scripts/skills-sync.sh
 
 ```bash
 # 使用 cronjob 工具创建
-# action=create, schedule="0 * * * *", script="skills-sync.sh", no_agent=true, deliver=local
+# action=create, schedule="0 * * * *", script="skills-sync.sh", no_agent=true, deliver=all
+# ⚠️ deliver=local 会让同步失败永远没人知道 —— 脚本输出只存进 cron/output/<job_id>/。
+#    有输出才推送，安静时不会打扰；定期看 cronjob(action="list") 的 last_status / last_error。
 ```
 
 ## 从设备设置
@@ -174,9 +198,21 @@ curl -s -H "Authorization: Bearer $GH_BOT_TOKEN" \
 
 ## Pitfalls
 
-1. **Token 泄露：** Token 嵌入 git remote URL 后，会在 `.git/config` 中以明文存储。在同一设备上可以接受，但注意不要误分享 `.git/config` 文件。
-2. **Token 过期：** GitHub PAT 有有效期。建议在 `.env_bot` 中标注过期日期，并设置 cron 定期检查。Token 过期后推送会返回 403。
-3. **首次推送大仓库：** skills 目录可能包含数百个文件（案例 687 个文件），首次 push 需要耐心等待几分钟。HTTPS 比 SSH 略慢但更稳定。
-4. **Hermes 内部文件：** `.bundled_manifest`、`.hub/`、`.curator_*`、`.usage.json` 等是 Hermes 运行时文件，不应入版本控制。务必配置 `.gitignore`。
-5. **skills 目录权限：** `/opt/data/skills/` 可能由 `hermes` 用户拥有，但 git 操作以 `root` 运行。需要 `git config --global --add safe.directory /opt/data/skills` 解决 `dubious ownership` 错误。
-6. **DNS 解析：** 中国网络下 GitHub API 的 DNS 可能被污染。如果 `api.github.com` 无法解析，尝试在脚本中使用 `--resolve` 或配置系统 DNS（如 `114.114.114.114`）。
+1. **只 push 不 pull —— 最隐蔽的坏法。** 推送前必须 `git fetch` + `git rebase origin/main`。多设备场景下别的实例推过之后，单纯 `git push` 会永久返回 `! [rejected] main -> main (fetch first)`，本地改动**再也上不去**，而脚本看起来“跑了”。冲突则 `git rebase --abort` 回滚并告警，绝不强推。
+2. **变更检测漏新文件。** 只比较 `git diff`（已跟踪文件）时，单独新建一个 skill 目录不会被提交、也不会同步。`git ls-files --others --exclude-standard` 非空也算有变更。
+3. **别用 `|| echo "failed"` 吞掉 push 失败。** 退出码必须传播（cron 靠它定 `last_status`），否则失败静默；脚本日常用 `set -uo pipefail`。
+4. **验证要对比远端 ref，不是 `/commits/main`（有缓存，会骗你）：**
+   ```bash
+   LOCAL=$(git rev-parse HEAD)
+   REMOTE=$(curl -s https://api.github.com/repos/HMS091/hermes-skills/git/refs/heads/main \
+     | python3 -c "import json,sys; print(json.load(sys.stdin)['object']['sha'])")
+   [ "$LOCAL" = "$REMOTE" ] && echo OK
+   # 想确认某个文件真的上去了，直接比 blob sha：
+   git rev-parse HEAD:mlops/scrapling/SKILL.md   # vs contents API 返回的 .sha
+   ```
+5. **Token 泄露：** Token 嵌入 git remote URL 后，会在 `.git/config` 中以明文存储。同一设备上可接受，注意别误分享 `.git/config`。
+6. **Token 过期：** GitHub PAT 有有效期。推送返回 403 就是过期信号；在 `.env_bot` 标注过期日期。
+7. **首次推送大仓库：** skills 目录可能有数百个文件，首次 push 需耐心等待几分钟。HTTPS 略慢但比 SSH 稳定（SSH 22 被 GFW 阻断）。
+8. **运行时文件不该入库：** `.bundled_manifest`、`.hub/`、`.curator_*`、`.usage.json`、`.locks/` 都是 Hermes 运行时产物；已误跟踪的先 `git rm -r --cached <path>` 再提交，并补进 `.gitignore`。
+9. **skills 目录权限：** `/opt/data/skills/` 可能属于 `hermes` 用户而 git 以 `root` 跑，需 `git config --global --add safe.directory /opt/data/skills` 解决 `dubious ownership`。
+10. **DNS 解析：** 中国网络下 `api.github.com` 的 DNS 可能被污染；用 `--resolve` 或换 DNS（如 `114.114.114.114`）。
