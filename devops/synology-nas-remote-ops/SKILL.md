@@ -55,6 +55,16 @@ ssh tmm@... "/usr/local/bin/docker run --rm -v /usr/syno/etc/certificate:/c:ro \
 - `/volume1/docker/` 下全部内容
 - `/usr/syno/etc/certificate/` **全部 root-only**（`_archive/` 700、`system/default/` 600），必须走 ① 或 ②
 
+### ④ chroot 提权：以 root 直接跑 DSM 自带命令（不需 sudo 密码，首选）
+```bash
+/usr/local/bin/docker run --rm --privileged -v /:/host alpine sh -c \
+  'chroot /host /bin/sh -c "systemctl status ddnsd; /usr/syno/sbin/ddnsd -a; /usr/syno/sbin/synoddnsinfo --get-provider-inused"'
+```
+- 宿主 rootfs 挂到 `/host` 后 chroot 进去，DSM 的 glibc 二进制/服务管理（`systemctl`、`/usr/syno/bin|sbin/*`）全都能用；容器内不能用 alpine 自带的 musl 跑 DSM 二进制（会 `not found`）
+- 读写 root-only 文件同理：`-v /etc:/hostetc` 后 `sed -i`/`cp` 备份（备份名带日期）
+- 适合：DDNS 配置与守护进程、查/重启 DSM 服务、读 `/etc/ddns.conf` 这类 600 权限文件
+- 仍然需要用户点一次 docker run 审批；比 ① PTY sudo 更稳（无 tty/引号问题）
+
 ## DSM iptables 劫持排障（docker 改端口后必查）
 
 **症状**：compose 端口映射变更后（如 `9800:80` → `127.0.0.1:19800:80`）：
@@ -129,6 +139,26 @@ ip -6 route add default via <主路由fe80::链路本地> dev ovs_eth0 table 100
 - 中继端口段（UDP 49152-65535）必须一起标记，否则 TURN relay 应答仍走代理
 - 注意：`cat 脚本 | ssh "cat > ... && sudo bash ..."` 会因管道占用 stdin 导致 sudo 读不到 tty——**分两步**：先传文件，再单独 pty sudo 执行
 
+## DSM DDNS（myds.me）失效排障：外网打不开但服务其实没问题
+**症状**：域名（如 `xxx.myds.me`）解析到 NAS **旧 IPv6 前缀** → 手机/外网全部连不上（超时），而服务器本身完全正常（本机 curl 200、内网 IP 直连 200）。运营商重新分配前缀后必然出现。
+**查**：
+```bash
+/usr/local/bin/docker run --rm --privileged -v /:/host alpine sh -c 'chroot /host /usr/syno/sbin/ddnsd -a'   # DSM 认为的外部 IP
+/usr/local/bin/docker run --rm -v /etc:/e alpine sh -c 'cat /e/ddns.conf'                                  # 记录本体（root-only 600）
+nslookup <域名> 8.8.8.8          # 与 ip -6 addr show scope global 的当前地址对比
+```
+**两个根因（都在 `/etc/ddns.conf`）**：
+1. `status=disabled` — 记录被停用，永不更新（用户以为在自动更新）。
+2. `interface_v6=default` — “default”指**承载默认路由的网卡**（本机是 ovs_eth1，没有全局 IPv6）→ 检测不到地址。必须写成具体网卡名（`interface_v6=ovs_eth0`）。
+   同一原因也解释了 `ddnsd -a` 输出 `IPv6: 0:0:0:0:0:0:0:0`、v4 却是代理出口 IP：external-IP 检测走的链路不是真正的 WAN。
+**修复**（备份 `/etc/ddns.conf` 后改 `status=enabled`、`interface_v6=<有公网 v6 的网卡>`、`ipv6=<当前地址>`），然后：
+```bash
+chroot /host /bin/sh -c 'systemctl restart ddnsd; systemctl restart heartbeatd'
+```
+记录通常 **几十秒内** 生效（Synology DDNS + heartbeatd）。验证：`nslookup <域名> 8.8.8.8` 等于当前地址。
+**日志线索**：`grep -iE 'heartbeatd|ddnsd' /var/log/messages` → `DDNS get Ext-IP failed`、`heartbeatd ... failed to send request[0][(null)]` = 更新链路失败。
+**验证外网可达性（在局域网内也能做）**：用公共抓取服务代为请求——`curl -s "https://r.jina.ai/https://<域名>:<端口>/status.php"`；返回内容=通；`TimeoutError` 而当前 IP 直连返回 TLS `ERR_CERT_COMMON_NAME_INVALID`（证书名不匹配=已连上）= 纯 DNS/DDNS 问题。`check-host.net` 没有 IPv6 节点，别用它测 v6。
+
 ## 陷阱速查
 - NAS 上 Hermes 容器（hermes-agent）：真正配置在 `/volume1/docker/hermes/hermes_data/`（HERMES_HOME=/opt/data，属主 10000，tmm 不可读，须 `docker exec hermes-agent` 访问）——**不是** `/volume1/docker/hermes/config.yaml`（那是 4 月的旧文件，勿改）
 - **Hermes v0.20.0+ 启动守卫**：config 里 `messaging.api_server.enabled: true` 时必须配强 `API_SERVER_KEY`（`openssl rand -hex 32` 写入 hermes_data/.env），否则 gateway 直接退出（`Gateway exiting cleanly: API_SERVER_KEY was rejected`），只剩 dashboard 活着。升级后必查
@@ -139,6 +169,9 @@ ip -6 route add default via <主路由fe80::链路本地> dev ovs_eth0 table 100
 - 改 overwritehost 后旧域名访问 302 到新域名（预期行为，切换域名时利用它验证）
 - 本机 curl HTTP 000 先试 `curl --noproxy '*'`（本机有 v2rayN 代理环境变量会干扰内网请求）
 - nginx ≥1.25.1 用 `http2 on;` 新语法；旧 `listen 8443 ssl http2;` 只警告不报错
+- **不同 compose 项目之间通过手工 external 网络共享容器**：应用配置里写的是**容器名**（如 Nextcloud `config.php` 的 `redis.host = lumina-redis`），名字没有项目归属。批量停/删一个“没用”的项目，会连带打死另一个项目里正常跑的服务（且 `/status.php` 仍返回 200，极难怀疑）。停项目前先 `grep -rl '<容器名>' /volume1/docker/*/config*` 查跨项目依赖；关键依赖改成独立容器 + `restart: always`
+- **多网卡主机的“默认接口”不等于有公网地址的接口**：本机默认路由走 `ovs_eth1`（.201，无全局 v6），而公网 v6 在 `ovs_eth0`。任何读“default interface”的组件（DSM DDNS、脚本取地址）都会拿到空值——取地址时显式指定网卡
+- 停容器释放内存前先确认没有 `restart: always` 之外的隐式依赖（见上一条）；用户会为了省内存批量停容器，这类操作最容易造成“服务莫名其妙坏了”
 
 ## References
 - `references/nextcloud-reverse-proxy-switch.md` — 完整案例：Nextcloud 从 CF 隧道切换 myds.me DDNS 直连（DDNS + nginx 反代 + occ 配置 + 劫持排障全流程）

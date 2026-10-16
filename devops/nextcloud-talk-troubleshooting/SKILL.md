@@ -27,6 +27,27 @@ WebRTC tries in order: direct P2P → STUN-assisted P2P → TURN relay (last res
 - External (4G/5G): strict/symmetric carrier NAT → P2P hole-punching usually fails → TURN relay REQUIRED.
 - So "WiFi OK / mobile fails" almost always means: TURN missing, unreachable, or the address handed to clients is a private IP.
 
+## Triage step 0 — "Talk 完全用不了" (can't open or join anything): check the shared Redis first
+Talk needs a working distributed memcache/locking. `config.php` refers to Redis by **container name**
+(`'redis' => ['host' => '<container>']` + `memcache.distributed`/`memcache.locking`), and that container is
+often attached to the Nextcloud network by hand **from a different compose project**. A batch stop of that
+other project (Container Manager multi-select cleanup to free RAM) silently kills Nextcloud while
+`/status.php` still answers 200 — so it looks like a Talk bug.
+1. Read the dependency: `docker exec nextcloud cat /var/www/html/config/config.php | grep -A4 "'redis'"`.
+2. Check that container: `docker ps -a --format '{{.Names}}|{{.Status}}'` — `Exited` = this is the bug.
+   Symptoms while it is down: `occ` prints `Redis server went away`, then (right after a restart)
+   `LOADING Redis is loading the dataset in memory` — give it ~10s; Talk UI and calls are dead meanwhile.
+3. `docker start <name>`, then verify: `occ status`, `occ user:list`, and a real PING from PHP —
+   `docker exec nextcloud php -r '$r=new Redis(); $r->connect("<host>",6379,3); echo $r->ping();'`
+4. **Decouple so it cannot recur**: add a dedicated redis service to the Nextcloud compose
+   (`redis:7-alpine`, `command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru`,
+   `restart: always`, on the Nextcloud network, bind `/volume1/docker/nextcloud/redis:/data`), start it with
+   `docker compose up -d --no-deps nextcloud-redis`, then `occ config:system:set redis host --value=nextcloud-redis`
+   and `docker exec nextcloud apachectl -k graceful`. Never hand-edit config.php here — the SSH user cannot write it,
+   `occ` can.
+General rule for this NAS: before stopping/uninstalling a compose project, grep other projects' app config for its
+container names — everything shares hand-made external networks, so "unused" containers frequently are not unused.
+
 ## Diagnosis workflow (in order)
 
 1. **Locate the Talk TURN config — it's in the DATABASE, not config.php.**
@@ -52,6 +73,7 @@ WebRTC tries in order: direct P2P → STUN-assisted P2P → TURN relay (last res
    - TCP: `timeout 6 bash -c "cat < /dev/null > /dev/tcp/<host>/3478"` → OPEN or unreachable.
    - UDP/STUN: run `scripts/stun_probe.py <host> <port>` (Python 3, sends STUN binding request, expects type 0x0101).
    - Full TURN allocation test (auth-secret mode, same as Nextcloud): from the coturn container, `turnutils_uclient -W <secret> -e 8.8.8.8 -p <port> <host>`. **PITFALL: `-e` (peer address) is mandatory** — without it uclient aborts with "Either -e peer_address or -y must be specified". `-W` = REST auth-secret; `-t` switches to TCP; `turnutils_stunclient -p <port> <host>` for plain UDP STUN (note `-p` is the port flag, position is address).
+  **PITFALL — do not judge the allocation test by uclient's packet stats**: with `-e 8.8.8.8 -n 2` it reports `Total lost packets 4 (100.000000%)` even when the relay worked perfectly, because the peer does not echo. Judge success by the coturn side instead: `docker logs --tail 300 <coturn> | grep -E "ALLOCATE processed, success|Local relay addr"`. Absence of both = the relay really is not answering.
    - **PITFALL — NAT hairpin**: probing your own public IP from INSIDE the LAN can time out even when port-forwarding is correct (routers vary on loopback support). "Unreachable from home" ≠ "broken"; confirm from real external network (4G phone / online port checker) before blaming the forward.
    - Both failing from outside = router port-forward missing/blocked, CGNAT (next step), or the hostname is behind a CDN proxy (step 4).
 
@@ -129,7 +151,16 @@ When Talk is fronted by spreed-signaling (HPB), the client's ICE/TURN servers co
 - Also clean the DB `stun_servers` of any dead hosted endpoint (e.g. Metered) — point it at the local coturn (`["<host>:3478"]`) or `stun.nextcloud.com:443`.
 
 ## Hosted TURN provider compatibility rule
-Nextcloud Talk accepts TURN servers ONLY in `static-auth-secret` mode: Nextcloud mints short-lived HMAC credentials (username=unix timestamp, password=base64(hmac_sha1(secret, username))) and hands them to clients. Any provider that only offers fixed username/password credentials (e.g. Metered.ca) is NOT compatible with Nextcloud Talk, even though its TURN servers speak standard RFC protocols. Evaluate the AUTH MODEL first, not the endpoint list. See references/metered-ca.md.
+With a `secret` on a `turn_servers` entry, Talk mints short-lived HMAC credentials
+(username=unix timestamp, password=base64(hmac_sha1(secret, username))) and hands them to clients — that is
+the mode the local coturn runs. **Correction to earlier notes in this skill:** Talk's `Config.php` ALSO
+honours a per-entry `username`/`password` (`$server['username'] ?? $username`), so a provider offering only
+fixed credentials (e.g. Metered.ca) is NOT automatically incompatible — check the code before declaring a
+provider unusable. The blocker that actually matters here is REACHABILITY: a remote relay
+(`global.relay.metered.ca:80` with username/password) did not complete an allocation from this network at
+all, and an unreachable entry costs every call ICE-gathering time. Rule: verify any candidate endpoint with a
+real allocation test from the NAS *and* from a phone's network before wiring it in; prefer the local coturn.
+See references/metered-ca.md.
 
 **Metered Open Relay (free) is DEAD as of 2026-08 — do not configure it.** The docs page `metered.ca/tools/openrelay/` still advertises `staticauth.openrelay.metered.ca` + `openrelayprojectsecret` for Nextcloud (it's the one free endpoint that DID support auth-secret), but live probes show: TCP 80/443 connect, yet STUN binding, TURN allocation (`turnutils_uclient -W openrelayprojectsecret ...` hangs), and HTTPS all get no response. The page is SEO residue. Only the paid product (username/password auth) is still alive. Always verify a hosted TURN with an actual allocation test before wiring it into Nextcloud.
 
@@ -150,12 +181,21 @@ When the ISP won't give a public IPv4, IPv6 often works with zero cost: CN mobil
    ```bash
    # edit the HOST file (container mount is read-only), then restart:
    cp /volume1/docker/talk/coturn/turnserver.conf{,.bak}
-   echo "relay-ipv6=<nas-global-v6-addr>" >> /volume1/docker/talk/coturn/turnserver.conf
-   echo "listening-ip=::"                 >> /volume1/docker/talk/coturn/turnserver.conf
+   grep -nE "listening-ip|relay-ip|external-ip" /volume1/docker/talk/coturn/turnserver.conf   # current state first
+   # target lines (there is NO `relay-ipv6` directive — use a SECOND `relay-ip=` line):
+   #   listening-ip=0.0.0.0
+   #   listening-ip=::
+   #   relay-ip=192.168.1.200
+   #   relay-ip=<nas-global-v6-addr>
    docker restart talk-coturn   # same for talk2/coturn2 with its own path + port 3479
-   # verify IPv6 + IPv4 STUN from inside the container:
+   # PITFALL: without an explicit `listening-ip=::` coturn binds only ::1 for v6 -> v6 STUN times out and
+   # remote (IPv6-only) clients have NO relay. Confirm the listener exists:
+   netstat -tuln | awk '$4 ~ /3478$/ && $4 ~ /::/'     # expect :::3478 tcp AND udp6
    docker exec talk-coturn turnutils_stunclient -p 3478 <nas-v6-addr>   # expect "IPv6. UDP reflexive addr: <v6>:port"
    docker exec talk-coturn turnutils_stunclient -p 3478 192.168.1.200   # IPv4 still OK
+   # coturn startup log must show BOTH relays: "relay <v4> initialization done" + "relay <v6> ... done"
+   # Every ISP prefix re-delegation invalidates BOTH the coturn v6 relay-ip and the DDNS AAAA record —
+   # refresh them together (see scripts/talk_health_check.sh).
    ```
    Then set Nextcloud DB config with the v6 address: `occ config:app:set spreed turn_servers --value='[{"schemes":"turn,turns","server":"[<v6>]:3478","secret":"<same-secret>","protocols":"udp,tcp"}]'` (IPv6 in brackets). TP-LINK ER IPv6 firewall lives at 安全管理 → IPv6防火墙 — it's a plain enable/disable switch with NO per-rule config; if inbound is blocked, disabling it (or adding access-control rules elsewhere) is the only option. Verify by actually calling from a 4G phone.
 
@@ -166,8 +206,25 @@ When the ISP won't give a public IPv4, IPv6 often works with zero cost: CN mobil
 Verified 2026-08: after 接口设置 saved with WAN1 prefix authorization, the box advertises `240e:39e:396:6520::/64`. NAS then needs DSM IPv6=Auto (accept_ra=2) + auto gateway to pick up a `240e:` global addr + default route.
 Pre-check before IPv6 work: `ipconfig` on a LAN PC — if it shows only fe80, the router isn't advertising yet (check an SLAAC entry exists). Fall back to public IPv4 (call ISP) or a VPS coturn only if the router genuinely lacks the 基本设置→接口设置 IPv6 option.
 
+## Remote path — verify reachability from OUTSIDE before touching TURN
+A stale DDNS/IPv6 record looks exactly like "Talk is broken": the phones never reach the server, so the access
+log shows nothing, `occ` is happy, and every ICE/TURN setting looks perfect. Check the remote path first.
+- Cheap external vantage while you are inside the LAN: fetch your own URL through a public fetch proxy —
+  `curl -s "https://r.jina.ai/https://<domain>:<port>/status.php"` returns the Nextcloud JSON when the path is
+  alive (IPv6 literals need brackets: `https://r.jina.ai/https://[240e:...]:9800/status.php`). A TLS
+  `ERR_CERT_COMMON_NAME_INVALID` while fetching by IP is *proof the path works*; a `TimeoutError` on the
+  hostname while the same-but-current IP works proves a stale DNS/DDNS record.
+- Compare DNS with the live address: `nslookup <domain> 8.8.8.8` vs `ip -6 addr show scope global`. A different
+  /64 prefix with the SAME EUI-64 interface id = stale DDNS record (this NAS's ISP re-delegates often).
+- The fix is DSM-side, not Talk-side — see the DDNS section of `synology-nas-remote-ops`.
+- Clients must be fully killed/reopened after any change to the hostname or ICE list.
+
 ## Pitfalls
 - `config.php` is not readable by the SSH user on the NAS (Permission denied) — always read via `docker exec <container> cat/grep`.
+- **An EMPTY `stun_servers` value (`[]`) means the client gets NO STUN at all** — `Config::getStunServers()` returns the decoded array verbatim; it only falls back to `stun.nextcloud.com:443` when the key is missing, not when it is `[]`. Always set it explicitly to the local coturn entries.
+- **`occ talk:stun:add` cannot add bracketed IPv6 entries** (`Incorrect value. Must be stunserver:port.`) and quietly prints usage for other forms. Set the whole list instead and read it back: `occ config:app:set spreed stun_servers --value='["[<v6>]:3478","192.168.1.200:3478"]'` → `occ talk:stun:list` (v6 entry first, so 4G clients answer instantly; the LAN entry only costs a short timeout elsewhere).
+- **An unreachable TURN/STUN entry is worse than no entry**: ICE gathering probes every entry and waits out each timeout, and a client that only has dead entries can stall the whole call. Delete dead providers (e.g. a region-blocked Metered relay) rather than leaving them "just in case".
+- On Synology DSM, **stopping an unrelated compose project can break Nextcloud/Talk** when a shared container lives on the Nextcloud network (see "Triage step 0"): the container name in `config.php` has no project scoping.
 - `docker` is NOT on the SSH user's PATH — use `/usr/local/bin/docker` (fallback `/var/packages/ContainerManager/target/usr/bin/docker`).
 - 4G/5G failure is not a server problem when the TURN address handed to clients is private — fix the DB config, don't rebuild coturn.
 - A Cloudflare-proxied domain makes 3478 look dead even when the NAS TURN works fine.
@@ -192,7 +249,9 @@ Pre-check before IPv6 work: `ipconfig` on a LAN PC — if it shows only fe80, th
 - references/tplink-er6229gpe-ac-admin.md — main-router admin UI (192.168.1.2:9000): login, menu map, why automation can't drive it (hand mouse actions to user).
 - references/hpb-turn-config-2026-08.md — spreed-signaling HPB `[turn]` config on this NAS: which container loads which file, per-instance secret/port mapping, symptom transcript.
 - references/talk-direct-policy-routing.md — policy routing so TURN/STUN replies bypass a transparent-proxy default gateway: DSM 7.2 toolchain limits, script walkthrough, verification, persistence via DSM Task Scheduler.
+- references/nas-setup.md — current deployment state: containers, Redis decoupling, coturn config, Talk ICE values, entry points (keep this file refreshed after every change).
 
 ## Scripts
 - scripts/stun_probe.py — UDP STUN binding-request reachability probe: `python stun_probe.py <host> [port]`.
 - scripts/talk-direct.sh — policy-routing installer: mark TURN/STUN src-ports → fwmark 1 → table 100 via main router (run as root on the NAS; persist via DSM Task Scheduler).
+- scripts/talk_health_check.sh — read-only end-to-end health check to run after any change (or when the user reports "Talk 又不行了"): Redis dependency/status, occ, Talk ICE config, coturn v4+v6 listeners and STUN, DDNS AAAA vs live address, external fetch test.
