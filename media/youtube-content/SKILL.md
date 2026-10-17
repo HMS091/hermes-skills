@@ -21,6 +21,15 @@ that runs the helper script:
 uv pip install youtube-transcript-api
 ```
 
+`uv pip install` refuses with `No virtual environment found` when no venv is active
+(the normal state on a bare host). Create one, install into it explicitly, and run the
+script with that interpreter instead of `uv run`:
+
+```bash
+uv venv /tmp/ytv && uv pip install --python /tmp/ytv/bin/python youtube-transcript-api
+/tmp/ytv/bin/python SKILL_DIR/scripts/fetch_transcript.py "URL" --text-only --timestamps
+```
+
 ## Helper Script
 
 `SKILL_DIR` is the directory containing this SKILL.md file. The script accepts any standard YouTube URL format, short links (youtu.be), shorts, embeds, live links, or a raw 11-character video ID.
@@ -68,9 +77,30 @@ After fetching the transcript, format it based on what the user asks for:
 4. **Transform** into the requested output format. If the user did not specify a format, default to a summary.
 5. **Verify**: re-read the transformed output to check for coherence, correct timestamps, and completeness before presenting.
 
+## No transcript? Read the page metadata instead
+
+A video with captions disabled (`Transcripts are disabled for this video`) or with no
+subtitle tracks (`yt-dlp --list-subs` → `has no automatic captions`) still exposes its
+description, title, author, views and publish date in the watch-page HTML. Plain HTTP is
+enough — no browser, no JS runtime:
+
+```python
+import urllib.request, re, json
+req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 ... Chrome/122",
+                                           "Accept-Language": "zh-CN,zh;q=0.9"})
+h = urllib.request.urlopen(req, timeout=40).read().decode("utf-8", "ignore")
+d = json.loads(re.search(r'var ytInitialPlayerResponse = (\{.*?\});</script>', h).group(1))
+vd = d["videoDetails"]   # title, author, viewCount, lengthSeconds, keywords, shortDescription
+print(vd.get("shortDescription"))
+```
+
+The description usually states the video's actual claim, and for money/"how I got rich" videos
+it exposes the funnel (paid group, course, contact). Report that the transcript is unavailable
+and analyse the claim from the description plus independent data — never invent what was said.
+
 ## Error Handling
 
-- **Transcript disabled**: tell the user; suggest they check if subtitles are available on the video page.
+- **Transcript disabled**: fall back to the page-metadata recipe above; say the transcript is unavailable rather than guessing.
 - **Private/unavailable video**: relay the error and ask the user to verify the URL.
 - **No matching language**: retry without `--language` to fetch any available transcript, then note the actual language to the user.
 - **Dependency missing**: run `uv pip install youtube-transcript-api` and retry.
