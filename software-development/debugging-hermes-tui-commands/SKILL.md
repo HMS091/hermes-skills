@@ -118,6 +118,10 @@ When surface-level inspection doesn't reveal the bug:
 - **Python side hangs or misbehaves:** use the `python-debugpy` skill to break inside `_SlashWorker.exec` or the command handler. `remote-pdb` set at the handler entry is the fastest path.
 - **Ink side not reacting:** use the `node-inspect-debugger` skill to break in `app.tsx`'s slash dispatch or the local command branch. `sb('dist/app.js', <line>)` after `npm run build`.
 - **Registry mismatch / unclear which side is wrong:** compare the canonical `COMMAND_REGISTRY` entry against the TUI's local command list side-by-side.
+- **Symptom may not be Ink at all:** the same TUI is also served to browsers by the dashboard over a PTY +
+  xterm.js, where font size, cell grid, clipping and zoom live entirely outside Ink (a session served that way
+  still reports `platform: tui`). Pin the surface first — process tree, PTY grid, listening port — with the
+  `hermes-ui-surface-triage` skill before reading render code.
 
 ## Pitfalls
 
