@@ -230,6 +230,29 @@ for page in doc:
 - Any "users" references (usually vague like "growing user base")
 - Revenue is almost never disclosed for private companies
 
+## Step 9: 资金流核验 ——「他们怎么收钱」（支付通道尽调）
+
+先确认「卖什么」，再确认「谁收单」。**实物/服务贸易**与**虚拟资产交易**是两条互斥的收单通道，付款方式能直接反推业务性质，比读营销页可靠。
+
+**硬规则（先记住，能省一半弯路）**
+- 支付宝/微信**从不**为加密交易提供通道（服务协议明文禁止虚拟货币交易，识别即停服+冻结账户）。所以加密相关站点上出现「支持支付宝/微信」，只有两种解释：
+  1. **跨境电商收单**——卖的是实物（硬件钱包、周边、礼盒），通道方是第三方跨境收单机构；
+  2. **C2C 个人转账**——平台只撮合，钱从买家私人账户到卖家私人账户，出事不受任何法律保护。
+- 结论要回答「能买什么」，不能滑成「能入金」。用户问「能不能用支付宝充值买币」，答案几乎总是「不能」。
+
+**查证三步（命中即停）**
+1. **帮助中心 sitemap 定位权威文章**：`curl -s https://help.<domain>/sitemap.xml`，grep `zh-CN` 文章 URL 里的关键词（支付/付款/法币/充值/订单/买）。一手口径（「订单支持的支付方式」「使用支付宝付款」）基本都在这类文章里。Intercom/Zendesk 系正文就在原始 HTML（还带一份转义 JSON），curl + 去标签即可。
+2. **商城/结账 FAQ 的支付清单**：Shopify 站把 FAQ 文案塞进 HTML 的转义 JSON（key 形如 `content__multiple_ways_to_pay...`），grep 关键词比渲染整页更全——支付宝/微信/银联/AlipayHK/GCash 往往在同一个列表里。
+3. **反查通道方**：这种「支付宝+微信+银联+AlipayHK+GCash+TrueMoney」混搭清单，基本出自同一家跨境收单机构（NihaoPay、Citcon、Oceanpayment、Airwallex 一类）。搜机构名确认商户准入（KYB）、结算币种/周期、费率，链路就完整。
+
+**资金流必须写全四段**：用户付款币种 → 收单机构（持牌主体、PCI 级别）→ 结算币种与周期（T+1/T+2）→ 商户法人账户所在司法辖区。缺一段就是没查完。
+
+**费率口径**：通道费（商户承担，约 2%–3% 起）+ 汇率加价（约 1%–3%）+ 结算提现费（跨境每笔十几到几十美元）。PSP 官网多为纯 JS 渲染、抓不到费率表——那就写「采用第三方集成商公开口径」，不要自己编数字。
+
+**法人主体优先级**（上架方、运营方、研发方常常是三个不同公司）：隐私政策/服务条款正文（含注册编号+注册地址，最硬）> App Store `sellerName` > 招聘简章（含统一社会信用代码）> Crunchbase/Dealroom。中港两地运营的公司要分层写：香港控股/上架主体、深圳研发实体、其他分支，不要压成一个「总部」。
+
+**融资口径陷阱**：中文稿普遍把「估值 $X」写成「融资 $X」。以官方英文原文用词为准（valuation vs raise），这一字之差能差一个数量级，发现媒体互抄错误要在报告里点名。
+
 ## Pitfalls
 
 - **Cloudflare on main domains**: saily.com, surfshark.com, hvmn.com all block curl. The press release subdomains (finance.yahoo.com, nordsecurity.com/press-area/) usually don't.

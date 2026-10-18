@@ -44,8 +44,11 @@ Checklist:
 ## Phase 3: Store listings (identity + ratings)
 
 ```bash
-# App Store — sellerName reveals the legal entity
+# App Store — sellerName reveals the legal entity；三区并列，上架与否本身就是结论
 curl -s "https://itunes.apple.com/lookup?id=<trackId>"
+for c in us hk cn; do curl -s "https://itunes.apple.com/lookup?id=<trackId>&country=$c"; done
+# 只有名字没有 trackId：先搜（顺带核对同名仿冒上架）
+curl -s "https://itunes.apple.com/search?term=<name>&entity=software&country=us&limit=10"
 # Reviews (max 50, page=1 only, mostRecent works / mostHelpful returns 0)
 curl -s "https://itunes.apple.com/jp/rss/customerreviews/page=1/id=<trackId>/sortBy=mostRecent/json?l=en"
 
@@ -56,6 +59,12 @@ curl -sL "https://play.google.com/store/apps/details?id=<pkg>&hl=zh_CN" \
 ```
 
 Cross-check bundleIds across the same seller → portfolio (NekokoLPA 1 + 2 both under KOSMONEKO OU). Play description often contains the developer's own data-safety disclaimers ("我们不收集电话号码…Google Play 会自动将其检测为收集电话号码").
+
+**解析坑**：`lookup`/`search` 会把 App 描述里的换行等控制字符原样吐出来，`json.loads(..., strict=False)` 才能过；用默认 strict 会 JSONDecodeError，看着像接口挂了，其实是解析问题。
+
+**三区对比读到三件事**：① 各区名字不同（美区/港区/台区常改名，搜不到≠没上架）；② `sellerName` 才是上架法人，与官网「关于我们」未必一致；③ **cn 区返回 0 条 = 未在中国大陆区上架**（加密、支付、翻墙类常见）——这本身是一条监管口径结论，报告里要据此写出「需港区/美区 Apple ID」。
+
+**别只信 trackName/sellerName**：港区存在 sellerName 与 artistName、`trackViewUrl` 互相矛盾的仿冒上架（挂 A 公司名、链接跳到完全无关的 App）。遇到就记录并核对 bundleId，不要把它当真实榜单数据引用。
 
 ## Phase 4: Company / author identity
 

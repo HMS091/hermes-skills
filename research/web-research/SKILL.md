@@ -18,6 +18,7 @@ curl -s -m 40 -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (
 ```
 - 中文站点**必须**带 `Accept-Language: zh-CN,zh;q=0.9`，否则部分站返回空/默认英文
 - **政策/法规/官方数据类站点**：优先抓部委门户、省级政府门户、市县级自然资源局/住建局网站的**转载页**（带"索引号+文号+全文"，比新闻稿权威、比门户首屏好抓），并用**文号**（形如 `自然资发〔20XX〕XX号`、`建房规〔20XX〕X号`）当查询词，命中率远高于用正文表述去搜；政府站基本不反爬。政策类查证的完整分层取证流程见 `china-urban-policy-analysis`。
+- **官方帮助中心/FAQ（Intercom、Zendesk 系）**：先拉 `sitemap.xml`，按关键词筛文章 URL（`zh-CN` + 支付/付款/法币/充值/订单），比站内搜索和浏览器快得多；正文就在原始 HTML 里（含一份转义 JSON），curl + 去标签即可。`web_extract` 对部分 help 子域会返回空或判为内网地址，不要据此认定页面读不了，换 curl。
 - 国内个人博客（Typecho/WordPress 系）基本不反爬，直接抓即可
 - 抓到的正文用 `grep`/`find` 定位关键词段落（如 `python -c` 里 `t.find('关键词')` 后切片）
 
@@ -58,4 +59,6 @@ curl -s -m 90 "https://r.jina.ai/https://x.com/用户名/status/帖子ID"
 - 调研结论要标注来源+日期（文章发布日期≠事件日期，事件时间线要单独梳理）
 
 ## 参考文件
+- `references/business-company-research.md` — 公司/产品尽调：多源三角验证、实体与融资口径，以及**资金流/支付通道核验**（用户问「他们支付宝/微信怎么入金的」时先看这一节）
+- `references/software-app-vetting.md` — App/软件尽调全流程：GitHub→代码→商店三区元数据→二进制校验→报告结构
 - `references/giffgaff-roaming-ban-2026.md` — 2026年7-8月 giffgaff 长期漫游封号事件完整调研（邮件原文、检测机制、退款/申诉窗口、无邮件应对、替代运营商、来源列表），用户问"我有卡怎么办"时直接引用
