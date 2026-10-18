@@ -16,7 +16,7 @@ scenarios:
 estimated_time: "10-15 min"
 ---
 
-
+> **本库已裁剪 PM 方法论包（2026-10-18）**：文中提到的兄弟技能（battle-card-builder / company-intel / market-landscape-scan / opportunity-solution-tree / epic-breakdown-advisor / problem-framing-canvas / discovery-interview-prep / finance-based-pricing-advisor / business-health-diagnostic 等）已归档到 `~/.hermes/skills/.archive/_pm-prune-20261018/`，需要时再 `mv` 回来。不要为了找不到它们而卡住——直接用本技能的步骤产出结果。
 ## Purpose
 
 Master revenue and retention metrics to understand SaaS business momentum, evaluate product-market fit, and make data-driven decisions about growth investments. Use this to calculate key metrics, interpret trends, identify problems early, and communicate business health to stakeholders.
@@ -640,3 +640,5 @@ See `examples/` folder for detailed scenarios. Mini examples below:
 - Adapted from `research/finance/Finance for Product Managers.md`
 - Consolidated from `research/finance/Finance_QuickRef.md`
 - Common mistakes from `research/finance/Finance_Metrics_Additions_Reference.md`
+
+

@@ -1,18 +1,18 @@
 ---
 name: hermes-skills-sync
-description: "Sync Hermes skills from an external Git repository (GitHub/GitLab) via SSH, config.yaml external_dirs, and a cron job for periodic git pull."
+description: "Sync skills from Git; audit, dedupe, and prune the library."
 version: 1.2.0
 author: Hermes Agent
 platforms: [windows, linux, macos]
 metadata:
   hermes:
     tags: [hermes, skills, sync, git, cron, setup]
-    related_skills: [github-auth, hermes-agent]
+    related_skills: [github, hermes-agent]
 ---
 
 # Hermes Skills Sync
 
-Synchronize a Hermes skills library from an external Git repository (e.g. a shared team skills repo on GitHub). This workflow makes the skills in that repo available to Hermes via `skills.external_dirs` and keeps them up-to-date with a cron job.
+Synchronize a Hermes skills library from an external Git repository (e.g. a shared team skills repo on GitHub). This workflow makes the skills in that repo available to Hermes via `skills.external_dirs` and keeps them up-to-date with a cron job. The same skill owns library hygiene afterwards: duplicate detection, pruning unused vendor packs, and repairing the cross-references those removals break.
 
 ## When to use
 
@@ -201,6 +201,25 @@ Build a **task → skill** mapping table for the user so they know what to load 
 
 Two skills with similar names or descriptions in adjacent directories are the top candidates. For each suspicious pair:
 
+0. **Scan the whole library first — don't eyeball it.** Token-set Jaccard over SKILL.md bodies finds the pairs you'd miss (nested dirs, umbrella-vs-leaf):
+
+   ```python
+   import glob, re, itertools
+   D = "/opt/data/skills"
+   docs = {}
+   for p in glob.glob(D + "/**/SKILL.md", recursive=True):
+       if "/.archive/" in p: continue
+       t = open(p, encoding="utf-8", errors="replace").read()
+       if t.startswith("---"):            # strip frontmatter so tags don't inflate overlap
+           e = t.find("\n---", 3); t = t[e+4:] if e > 0 else t
+       docs[p[len(D)+1:-9]] = set(re.findall(r"[a-z\u4e00-\u9fff]{4,}", t.lower()))
+   for a, b in itertools.combinations(docs, 2):
+       j = len(docs[a] & docs[b]) / len(docs[a] | docs[b])
+       if j > 0.30: print(round(j, 2), a, b)
+   ```
+
+   Calibrate against the baseline: a large vendor pack (e.g. the 70-skill product-management drop) scores 0.33–0.38 for *unrelated* skills because they share one author's template. Only ~0.6+ means the same content; 1.00 means a literal copy.
+
 1. **Read both SKILL.md files** — compare purpose, steps, tools used
 2. **Check version** — higher version = more mature
 3. **Check community adoption** — `hermes skills search <name>` for hub listing count
@@ -228,6 +247,31 @@ Example — `plan` vs `writing-plans`:
 | Mode guardrail | ✅ "planning only, no code" | ❌ none |
 | Save location | `.hermes/plans/` (Hermes-native) | `docs/plans/` + git commit |
 | Result | **Keep** | **Delete** (fully covered + conflicts) |
+
+**Before deleting, test for layering:** `grep -c '<other-skill-name>' A/SKILL.md B/SKILL.md` in both directions. Mutual references (advisor → executor → back) mean the pair is a *router + component* by design, not a duplicate — keep both. One-way or zero references plus a shared output artifact = real duplicate. Duplicates hide in three specific shapes:
+
+| Shape | Example | Tell |
+|---|---|---|
+| Nested copy | `creative/comfyui/comfyui/` | Jaccard 1.00, inner dir has no scripts/tests |
+| Umbrella that already consolidated the leaves | `software-development/github` says "consolidates six former skills", yet `github/github-{auth,issues,pr-workflow,…}` still exist | leaf refs+scripts are a subset of the umbrella's `references/` |
+| Same topic, 4 rewrites | `nextcloud-talk-troubleshooting` vs `webrtc-turn-server` vs `coturn-turn-server` vs `webrtc-turn-troubleshooting` | all 4 answer "WiFi works, 4G fails"; keep the newest+largest+most-used, copy unique `references/*.md` into it first |
+
+**Removal protocol (archive, never `rm`)**: `mv <skill> /opt/data/skills/.archive/_dedupe-<date>/<a__b>` + a `MERGED-INTO.txt` (reason + restore command). Dot-prefixed archives aren't scanned. Then, in the SAME pass, `grep -rn '<dead-skill-name>' /opt/data/skills --include='*.md'` and repoint every hit: `related_skills:` lists, "see the X skill" prose, `--skills "X"` in webhook/cron examples, and hardcoded `skills/<cat>/<skill>/scripts/...` paths (those break silently — the script moved with the umbrella). Finish with `hermes skills list | tail -2` (count drops by exactly the archived number, 0 disabled, no ambiguous-name errors) and `skill_view` on each survivor.
+
+### Pruning a Whole Pack (vendor drop, 50+ unused skills)
+
+When a vendor pack lands (e.g. a 77-skill PM methodology library) and every skill shows `use_count: 0`, dedupe is not the work — triage is. Rules:
+
+1. **Keep a task-mapped core, not a topic-mapped sample.** For THIS user, keep the pack skills whose *artifact* they actually produce (market sizing, metric formulas, competitive snapshot, PRD, VoC mining, positioning) and archive the org/exec/career/process machinery (readiness advisors, EOL suites, stakeholder grids, workshops-by-dialogue). 8–10 survivors out of 77 is the right order of magnitude.
+2. **Re-check what the survivors depend on before you stop.** `grep` each keeper for backticked sibling names; pack-wide infrastructure (an investigation protocol, a workshop pacing controller) is load-bearing even though it produces no artifact itself — pull those 1–2 back out of the archive or the keepers stall mid-run.
+3. **Annotate every keeper in one line** right after its frontmatter: "siblings X/Y/Z are archived at `.archive/_<bucket>/`, pull one back with `mv` if needed; do not stall looking for them." Without it the model reads "hand off to skill Y", fails to load Y, and burns turns.
+4. **Archive in one bucket per pass** (`.archive/_dedupe-<date>/`, `.archive/_pm-prune-<date>/`) with a per-skill `MERGED-INTO.txt` / `ARCHIVED.txt` holding the reason and the exact restore `mv`. Report the count delta and the index-token saving (name+description per entry, ~50 tokens each) — the user asks for the price of everything.
+
+**Pitfall — an anchored `^related_skills:` regex silently edits nothing.** In every real SKILL.md the key is indented under `metadata.hermes:` (`    related_skills: [...]`), so `re.search(r'^related_skills:', t, re.M)` returns None, your "0 dangling removed" report is a lie, and the fix pass looks complete. Use the unanchored form `re.search(r'related_skills:\s*\[([^\]]*)\]', t)` and **assert a non-zero edit count** before believing a cleanup pass.
+
+**Pitfall — never insert text by anchoring on `^# `.** Skill bodies embed templates in fenced blocks that start with `# ` (```` ```markdown # TAM/SAM/SOM Analysis ````), so the note lands inside the example the skill emits. Insert after the frontmatter's closing `---` instead, then assert the body's first line is the note.
+
+Recipes (scan, archive, annotate, verify) live in `references/library-dedupe-and-prune.md`; run `scripts/skills_library_audit.py` for the one-command version (similar pairs + dangling `related_skills` + counts).
 
 **Pitfall — git config before commit:** When `git commit` fails with `Author identity unknown`, set local git config:
 ```bash
@@ -351,4 +395,6 @@ ssh user@nas "echo 'key' >> ~/.ssh/authorized_keys"
 
 ## Reference
 
+- `references/library-dedupe-and-prune.md` — Dedupe/prune recipes: Jaccard scoring and how to read it, the cross-reference test that separates layered skills from duplicates, archive+annotate+verify code, `related_skills` rewrite, seed-drift refresh rule, and the report shape this user expects.
+- `scripts/skills_library_audit.py` — Read-only audit of the live library: counts, zero-use skills, similar pairs, dangling `related_skills`, live-vs-seed drift. Run it before any dedupe or prune pass.
 - `references/hms091-example.md` — Full transcript of a real HMS091 skills sync session on Windows (SSH key gen, clone, config, cron, gateway install). Use as a concrete template.

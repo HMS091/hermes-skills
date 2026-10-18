@@ -8,7 +8,7 @@ platforms: [linux, macos]
 metadata:
   hermes:
     tags: [content-moderation, nsfw-detection, safe-content, laravel, php, review-workflow, ai-moderation]
-    related_skills: [web-research, business-project-evaluation, autonomous-freelancing]
+    related_skills: [web-research]
 ---
 
 # AI Content Moderation System

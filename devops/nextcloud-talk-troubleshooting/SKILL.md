@@ -255,3 +255,10 @@ log shows nothing, `occ` is happy, and every ICE/TURN setting looks perfect. Che
 - scripts/stun_probe.py — UDP STUN binding-request reachability probe: `python stun_probe.py <host> [port]`.
 - scripts/talk-direct.sh — policy-routing installer: mark TURN/STUN src-ports → fwmark 1 → table 100 via main router (run as root on the NAS; persist via DSM Task Scheduler).
 - scripts/talk_health_check.sh — read-only end-to-end health check to run after any change (or when the user reports "Talk 又不行了"): Redis dependency/status, occ, Talk ICE config, coturn v4+v6 listeners and STUN, DDNS AAAA vs live address, external fetch test.
+
+### 合并进来的旧技能资料（原 coturn-turn-server / webrtc-turn-server / webrtc-turn-troubleshooting）
+- references/turn-providers-hosted.md — 托管 TURN 服务横向对比（Metered / Twilio / Cloudflare 等报价与限制）。
+- references/metered-openrelay-nextcloud.md — Metered Open Relay 在 Nextcloud Talk 下的实测（端口通但分配失败）。
+- references/legacy-nextcloud-talk-config.md — 旧版 Nextcloud 中继配置写法（含 occ 参数历史差异）。
+- references/legacy-nextcloud-talk-debug.md — 早期 coturn 排障记录（auth-secret 测试、hairpin）。
+- references/legacy-ipv6-solution-2026-08.md — 2026-08 IPv6 打通原始记录（结论已并入 ipv6-cgnat-bypass-2026-08.md）。

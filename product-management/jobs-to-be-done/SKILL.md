@@ -16,7 +16,7 @@ scenarios:
 estimated_time: "20-30 min"
 ---
 
-
+> **本库已裁剪 PM 方法论包（2026-10-18）**：文中提到的兄弟技能（battle-card-builder / company-intel / market-landscape-scan / opportunity-solution-tree / epic-breakdown-advisor / problem-framing-canvas / discovery-interview-prep / finance-based-pricing-advisor / business-health-diagnostic 等）已归档到 `~/.hermes/skills/.archive/_pm-prune-20261018/`，需要时再 `mv` 回来。不要为了找不到它们而卡住——直接用本技能的步骤产出结果。
 ## Purpose
 Systematically explore what customers are trying to accomplish (functional, social, emotional jobs), the pains they experience, and the gains they seek. Use this framework to uncover unmet needs, validate product ideas, and ensure your solution addresses real motivations—not just surface-level feature requests.
 
@@ -389,3 +389,5 @@ Mini example excerpt:
 **Suggested placement:** `/skills/components/`
 **Dependencies:** References `skills/proto-persona/SKILL.md`
 **Used by:** `skills/positioning-statement/SKILL.md`, `skills/problem-statement/SKILL.md`, `skills/epic-hypothesis/SKILL.md`
+
+

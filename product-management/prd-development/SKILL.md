@@ -16,7 +16,7 @@ scenarios:
 estimated_time: "60-120 min"
 ---
 
-
+> **本库已裁剪 PM 方法论包（2026-10-18）**：文中提到的兄弟技能（battle-card-builder / company-intel / market-landscape-scan / opportunity-solution-tree / epic-breakdown-advisor / problem-framing-canvas / discovery-interview-prep / finance-based-pricing-advisor / business-health-diagnostic 等）已归档到 `~/.hermes/skills/.archive/_pm-prune-20261018/`，需要时再 `mv` 回来。不要为了找不到它们而卡住——直接用本技能的步骤产出结果。
 ## Purpose
 Guide product managers through structured PRD (Product Requirements Document) creation by orchestrating problem framing, user research synthesis, solution definition, and success criteria into a cohesive document. Use this to move from scattered notes and Slack threads to a clear, comprehensive PRD that aligns stakeholders, provides engineering context, and serves as a source of truth—avoiding ambiguity, scope creep, and the "build what's in my head" trap.
 
@@ -50,6 +50,8 @@ A PRD (Product Requirements Document) is a structured document that answers:
 
 ```markdown
 # [Feature/Product Name] PRD
+
+
 
 ## 1. Executive Summary
 - One-paragraph overview (problem + solution + impact)

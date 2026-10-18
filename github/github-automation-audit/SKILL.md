@@ -8,7 +8,7 @@ platforms: [linux, macos, windows]
 metadata:
   hermes:
     tags: [GitHub, Actions, Audit, Notifications, Automation]
-    related_skills: [github-repo-management, github-auth, github-issues, cron-data-workflows]
+    related_skills: [github, cron-data-workflows]
 ---
 
 # GitHub Automation Audit

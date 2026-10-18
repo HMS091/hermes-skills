@@ -18,7 +18,10 @@ scenarios:
 estimated_time: "20-40 min per run"
 ---
 
+> **本库已裁剪 PM 方法论包（2026-10-18）**：文中提到的兄弟技能（battle-card-builder / company-intel / market-landscape-scan / opportunity-solution-tree / epic-breakdown-advisor / problem-framing-canvas / discovery-interview-prep / finance-based-pricing-advisor / business-health-diagnostic 等）已归档到 `~/.hermes/skills/.archive/_pm-prune-20261018/`，需要时再 `mv` 回来。不要为了找不到它们而卡住——直接用本技能的步骤产出结果。
 # Competitive Research Snapshot
+
+
 
 ## Purpose
 

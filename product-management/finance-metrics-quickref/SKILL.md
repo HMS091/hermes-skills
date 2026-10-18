@@ -17,7 +17,7 @@ theme: finance-metrics
 estimated_time: "5-10 min"
 ---
 
-
+> **本库已裁剪 PM 方法论包（2026-10-18）**：文中提到的兄弟技能（battle-card-builder / company-intel / market-landscape-scan / opportunity-solution-tree / epic-breakdown-advisor / problem-framing-canvas / discovery-interview-prep / finance-based-pricing-advisor / business-health-diagnostic 等）已归档到 `~/.hermes/skills/.archive/_pm-prune-20261018/`，需要时再 `mv` 回来。不要为了找不到它们而卡住——直接用本技能的步骤产出结果。
 ## Purpose
 
 Quick reference for any SaaS finance metric without deep teaching. Use this when you need a fast formula lookup, benchmark check, or decision framework reminder. For detailed explanations, calculations, and examples, see the related deep-dive skills.
@@ -321,3 +321,5 @@ Quick output:
 - Adapted from `research/finance/Finance_QuickRef.md`
 - Formulas from `research/finance/Finance for Product Managers.md`
 - Decision frameworks from `research/finance/Finance_For_PMs.Putting_It_Together_Synthesis.md`
+
+

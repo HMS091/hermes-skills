@@ -1,0 +1,2 @@
+Archived 2026-10-18: 0 usage (never loaded), 3rd-party PM pack bloat.
+Restore: mv '/opt/data/skills/.archive/_pm-prune-20261018/altitude-horizon-framework' '/opt/data/skills/product-management/altitude-horizon-framework'

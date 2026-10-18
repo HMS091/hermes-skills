@@ -16,7 +16,7 @@ scenarios:
 estimated_time: "10-15 min"
 ---
 
-
+> **本库已裁剪 PM 方法论包（2026-10-18）**：文中提到的兄弟技能（battle-card-builder / company-intel / market-landscape-scan / opportunity-solution-tree / epic-breakdown-advisor / problem-framing-canvas / discovery-interview-prep / finance-based-pricing-advisor / business-health-diagnostic 等）已归档到 `~/.hermes/skills/.archive/_pm-prune-20261018/`，需要时再 `mv` 回来。不要为了找不到它们而卡住——直接用本技能的步骤产出结果。
 ## Purpose
 Create a Geoffrey Moore-style positioning statement that clearly articulates who your product serves, what need it addresses, how it's categorized, what benefit it delivers, and how it differs from alternatives. Use this when you need to align stakeholders on product strategy, guide messaging, or test if your value proposition is crisp and defensible.
 
@@ -240,3 +240,5 @@ Mini example excerpt:
 **Suggested filename:** `positioning-statement.md`
 **Suggested placement:** `/skills/components/`
 **Dependencies:** References `skills/problem-statement/SKILL.md`, `skills/jobs-to-be-done/SKILL.md`, `skills/proto-persona/SKILL.md`
+
+

@@ -1,0 +1,3 @@
+Archived 2026-10-18 by dedupe pass.
+dup of nextcloud-talk-troubleshooting; coturn/debug ref copied in
+Restore: mv '/opt/data/skills/.archive/_dedupe-20261018/devops__coturn-turn-server' '/opt/data/skills/devops/coturn-turn-server'

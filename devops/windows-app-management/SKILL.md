@@ -1,6 +1,7 @@
 ---
 name: windows-app-management
-description: Install, uninstall, and clean up Windows desktop applications — especially Squirrel/MSIX-based apps behind problematic proxies. Covers complete removal, offline local-MSIX install, and aria2c download recovery.
+description: 管理 Windows 桌面应用：彻底卸载、离线安装、以及从 GitHub Releases 升级便携软件（代理/TUN 环境）。
+
 ---
 
 # Windows App Management
@@ -156,3 +157,6 @@ When behind Clash in TUN mode:
 - **UAC prompt during install**: The `-local-msix` path still triggers UAC elevation. The user needs to click "Yes" on the dialog.
 - **Large file paths in curl**: curl on Windows (native binary) doesn't understand MSYS paths like `/c/Users/`. Use relative paths (change to download dir first) or Windows paths with `C:\` syntax.
 - **Single connection vs multi-connection tradeoff**: Single connection (`-x 1`) is more reliable but much slower. Multi-connection (`-x 4`) is faster but more susceptible to partial corruption if mixed with other download tools. Always start clean.
+
+## References
+- `references/github-release-upgrade.md` — 从 GitHub Releases 升级便携 exe（代理/TUN 检测、aria2c 下载校验、替换与回滚；含 CC Switch 具体路径。原 `windows-github-upgrade` 技能已并入）。

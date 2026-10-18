@@ -16,7 +16,7 @@ scenarios:
 estimated_time: "20-40 min"
 ---
 
-
+> **本库已裁剪 PM 方法论包（2026-10-18）**：文中提到的兄弟技能（battle-card-builder / company-intel / market-landscape-scan / opportunity-solution-tree / epic-breakdown-advisor / problem-framing-canvas / discovery-interview-prep / finance-based-pricing-advisor / business-health-diagnostic 等）已归档到 `~/.hermes/skills/.archive/_pm-prune-20261018/`，需要时再 `mv` 回来。不要为了找不到它们而卡住——直接用本技能的步骤产出结果。
 ## Purpose
 Guide product managers through calculating Total Addressable Market (TAM), Serviceable Available Market (SAM), and Serviceable Obtainable Market (SOM) for a product idea by asking adaptive, contextually relevant questions. Use this to build defensible market size estimates backed by real-world citations, economic projections, and population data—essential for pitching to investors, securing budget, or validating product-market fit.
 
@@ -270,6 +270,8 @@ After collecting responses, the agent generates a structured analysis:
 
 ```markdown
 # TAM/SAM/SOM Analysis
+
+
 
 **Problem Space:** [User's input from Question 1]
 **Geographic Region:** [User's input from Question 2]

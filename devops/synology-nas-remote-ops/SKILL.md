@@ -175,3 +175,4 @@ chroot /host /bin/sh -c 'systemctl restart ddnsd; systemctl restart heartbeatd'
 
 ## References
 - `references/nextcloud-reverse-proxy-switch.md` — 完整案例：Nextcloud 从 CF 隧道切换 myds.me DDNS 直连（DDNS + nginx 反代 + occ 配置 + 劫持排障全流程）
+- `references/docker-deploy-sync.md` — 从 Windows 本地开发机部署/同步 Docker 项目到本 NAS（cat/tar 管道同步、compose 起停、Laravel 缓存清理、已知项目清单；原 `nas-docker-deploy` 技能已并入）。

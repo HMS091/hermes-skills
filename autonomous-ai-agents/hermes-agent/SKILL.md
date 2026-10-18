@@ -1276,3 +1276,30 @@ Types: `fix:`, `feat:`, `refactor:`, `docs:`, `chore:`
 - Use `get_hermes_home()` from `hermes_constants` for all paths (profile-safe)
 - Config values go in `config.yaml`, secrets go in `.env`
 - New tools need a `check_fn` so they only appear when requirements are met
+
+
+## 上游 v3.2 参考文件（2026-10-18 从 bundled seed 并入）
+
+本 SKILL.md 正文是 v2.1 基础上长期积累的完整手册（CLI/Slash/网关/诊断都在下文）；
+官方 v3.2 起改成分册结构，下列 `references/*.md` 是上游新增的分册，正文没覆盖时优先读它们：
+
+| 主题 | 文件 |
+|---|---|
+| 排查故障总入口 | `references/troubleshooting.md` |
+| provider / model 选择 | `references/providers-and-models.md` |
+| config.yaml 全量键位 | `references/configuration.md` |
+| CLI 全命令 | `references/cli-reference.md` |
+| Slash 命令 | `references/slash-commands.md` |
+| 安全与隐私（密钥、沙箱、遥测） | `references/security-privacy.md` |
+| Windows 特有问题 | `references/windows-quirks.md` |
+| 后台任务/服务/cron 架构 | `references/background-systems.md` |
+| delegate_task 并发排队诊断 | `references/delegate-task-concurrency-diagnosis.md` |
+| 桌面插件 | `references/desktop-plugins.md`（另有独立 skill `hermes-desktop-plugins`，模板在 `templates/plugin.js`） |
+| 主题皮肤 | `references/themes.md`（独立 skill `hermes-themes`，模板 `templates/skin.yaml`） |
+| TUI 挂件 | `references/tui-widgets.md`（独立 skill `tui-widgets`，模板 `templates/clock.mjs`） |
+| petdex 桌面宠物 | `references/petdex.md`（独立 skill `petdex`） |
+| MCP 配置 | `references/native-mcp.md`（独立 skill `native-mcp`） |
+| Webhook | `references/webhooks.md`（独立 skill `webhook-subscriptions`） |
+| 项目上下文文件（AGENTS.md 等） | `references/project-context-files.md` |
+| 第三方应用 portal 登录 | `references/portal-auth-for-third-party-apps.md` |
+| 贡献者指南 | `references/contributor-guide.md` |

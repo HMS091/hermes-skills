@@ -1,0 +1,3 @@
+Archived 2026-10-18 by dedupe pass.
+byte-identical nested copy of creative/comfyui (Jaccard 1.00); outer dir has scripts/tests/workflows/references
+Restore: mv '/opt/data/skills/.archive/_dedupe-20261018/creative__comfyui__comfyui' '/opt/data/skills/creative/comfyui/comfyui'

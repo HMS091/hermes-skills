@@ -13,7 +13,7 @@ triggers:
 metadata:
   hermes:
     tags: [scraping, crawling, anti-bot, cloudflare, playwright]
-    related_skills: [blocked-page-recovery, web-research, lightpanda]
+    related_skills: [blocked-page-recovery, web-research]
   venv: /opt/data/scrapling-venv
   helper: /opt/data/scripts/scrapling_helper.py
   cli: /usr/local/bin/scrapling (wrapper; also /usr/local/bin/scrapling-mcp)

@@ -1,0 +1,3 @@
+Archived 2026-10-18 by dedupe pass.
+absorbed into software-development/plan v2.0 ("writing-craft adapted from obra/superpowers"), Jaccard 0.77
+Restore: mv '/opt/data/skills/.archive/_dedupe-20261018/software-development__writing-plans' '/opt/data/skills/software-development/writing-plans'

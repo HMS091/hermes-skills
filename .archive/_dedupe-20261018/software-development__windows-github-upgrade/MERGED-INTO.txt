@@ -1,0 +1,3 @@
+Archived 2026-10-18 by dedupe pass.
+body + cc-switch ref folded into windows-app-management/references/github-release-upgrade.md (both = install/upgrade Windows apps behind proxy)
+Restore: mv '/opt/data/skills/.archive/_dedupe-20261018/software-development__windows-github-upgrade' '/opt/data/skills/software-development/windows-github-upgrade'

@@ -8,7 +8,7 @@ platforms: [linux, macos]
 metadata:
   hermes:
     tags: [github, search, evaluation, open-source, clone, forking]
-    related_skills: [codebase-inspection, github-repo-management, web-research]
+    related_skills: [codebase-inspection, github, web-research]
 prerequisites:
   commands: [curl]
 ---
