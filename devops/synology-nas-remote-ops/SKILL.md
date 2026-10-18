@@ -65,6 +65,14 @@ ssh tmm@... "/usr/local/bin/docker run --rm -v /usr/syno/etc/certificate:/c:ro \
 - 适合：DDNS 配置与守护进程、查/重启 DSM 服务、读 `/etc/ddns.conf` 这类 600 权限文件
 - 仍然需要用户点一次 docker run 审批；比 ① PTY sudo 更稳（无 tty/引号问题）
 
+### ⑤ 完全没有 SSH 凭据时（用户忘了密码 / 拒绝给密码）
+- **不要向用户在聊天里要密码，也不要在命令里回填密码。** 走 DSM 图形界面让用户自己粘一次 root 脚本：控制面板 → 任务计划 → 新增 → 用户定义的脚本 → 用户选 root → 保存 → 右键「运行」。
+- 两种产物，按需要选：
+  - **授权公钥**（之后全部由你远程做，最省事）：`for H in /root /var/services/homes/admin; do mkdir -p $H/.ssh; echo '<公钥>' >> $H/.ssh/authorized_keys; chmod 700 $H/.ssh; chmod 600 $H/.ssh/authorized_keys; done`
+  - **一次性修配置**：脚本自带备份 + 健康检查 + 失败回滚，输出重定向到共享目录里的 txt（任务计划不显示 stdout，让用户去 File Station 打开）。
+- 写完先本地验证：合成一份配置副本，跑同一段改写逻辑，用解析器确认只改了目标键（PyYAML 用 `uv pip install pyyaml --default-index https://mirrors.aliyun.com/pypi/simple/`）。配置写坏 = 服务起不来。
+- 具体到 AdGuard Home 后台密码：见 `network-ad-blocking`（`users: []` 关闭认证 + `scripts/agh-reset-auth.sh`）。
+
 ## DSM iptables 劫持排障（docker 改端口后必查）
 
 **症状**：compose 端口映射变更后（如 `9800:80` → `127.0.0.1:19800:80`）：

@@ -23,6 +23,7 @@ Find and evaluate open-source projects (clones, templates, boilerplates) on GitH
 - User wants "something I can modify and use" as a ready-made solution
 - User wants to evaluate open-source alternatives for a product/feature
 - User is looking for starter code or boilerplates in a specific tech stack
+- User instead asks "安不安全 / 有没有后门 / 能不能直接跑" → switch to `untrusted-code-audit` (outbound-channel inventory, prebuilt-binary dating, artifact verification). Discovery verdicts answer "is it good", not "is it safe".
 
 ## 1. Search Strategy — Multiple Keyword Angles
 
