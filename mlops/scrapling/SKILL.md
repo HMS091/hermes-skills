@@ -25,16 +25,18 @@ metadata:
 
 # Scrapling
 
-Web scraping toolkit, installed and **verified working** on this box (2026-10-13).
-Installed at `/opt/data/scrapling-venv/`, CLI wrapper at `/usr/local/bin/scrapling`, browsers
-(Chromium 1243 = Chrome for Testing 153.0.8010.12) at `/opt/data/scrapling-browsers`.
-Tool versions: scrapling 0.4.15, playwright/patchright 1.63.0, curl-cffi 0.16.3, mcp 2.3.0.
-Feature set: HTTP Fetcher (curl-cffi impersonation), DynamicFetcher (JS rendering),
-StealthyFetcher (patchright + Cloudflare solving), Spider (full crawl), adaptive selectors, CLI, MCP.
+Web scraping toolkit, installed and **verified working** on this box (re-verified 2026-10-19 after the
+0.5 upgrade: selftest 6/6 PASS). Installed at `/opt/data/scrapling-venv/`, CLI wrapper at
+`/usr/local/bin/scrapling` (+ `scrapling-mcp`), browsers (Chromium 1243) at `/opt/data/scrapling-browsers`.
+Tool versions: scrapling 0.5, playwright/patchright 1.63.0, curl-cffi 0.16.3, mcp 2.3.0.
+Feature set: HTTP Fetcher (curl-cffi impersonation), StealthyFetcher (patchright + Cloudflare solving,
+**the only browser fetcher since 0.5**), Spider, adaptive selectors, CLI, MCP.
 
-Status: 0.4.15 = newest release on PyPI *and* GitHub (v0.4.15, 2026-08-23), so there is nothing
-newer to upgrade to. What actually needed fixing was the environment (browsers missing, the
-browser fetchers unable to launch, the helper writing empty files) — all fixed and re-tested.
+Status: 0.5 is newest on PyPI. Breaking changes in 0.5: `DynamicFetcher` **removed** (use
+`StealthyFetcher`; the helper's `dynamic` command is now an alias for it) and `Response.text` is gone
+(use `.body` / `.html_content` / `.get_all_text()`). Upgrade with
+`uv pip install --python /opt/data/scrapling-venv/bin/python --reinstall --no-deps scrapling==<ver>`
+(the venv has no pip) and rebuild `/usr/local/bin` wrappers — `weekly-update.sh` does both plus a selftest.
 
 ## When to Use
 
@@ -86,7 +88,7 @@ Otherwise: Scrapling is faster, cheaper, and more reliable.
 | Need | Use | Why |
 |---|---|---|
 | Static page / JSON / RSS / bulk text extraction | **Scrapling `Fetcher`** (curl-cffi impersonation) | fastest, no browser, TLS fingerprint looks like Chrome |
-| JS-rendered page, one-off | **Scrapling `DynamicFetcher`** | renders JS, returns DOM + `markdown()` |
+| JS-rendered page, one-off | **Scrapling `StealthyFetcher`** (0.5 dropped DynamicFetcher) | renders JS, returns DOM + `markdown()` |
 | Cloudflare / anti-bot wall | **Scrapling `StealthyFetcher --solve-cloudflare`** | patchright stealth + turnstile solving (verified) |
 | Many pages of one site, structured crawl | **Scrapling `Spider`** | concurrency, resume, item export |
 | Full local headless browser, interactive stepping (click/fill) | **Lightpanda MCP** (`mcp_lightpanda_*`) | real browser semantics, low memory |
@@ -156,7 +158,7 @@ Combine with `browser_scroll` to reveal more content before extracting.
 ## Fetch Decision Tree
 
 1. **Simple site** (blogs, docs, APIs) → `Fetcher.get()` / CLI `scrapling extract get`
-2. **JS-heavy** (React/SPA, lazy-loaded) → `DynamicFetcher` / CLI `scrapling extract fetch`
+2. **JS-heavy** (React/SPA, lazy-loaded) → `StealthyFetcher` (or helper `dynamic`) / CLI `scrapling extract fetch`
 3. **Has Cloudflare/anti-bot** → `StealthyFetcher` / CLI `scrapling extract stealthy-fetch --solve-cloudflare`
 4. **Need multiple pages** → `Scrapling Spider`
 5. **Not sure** -> start with `get`, if fails go `stealthy-fetch`
@@ -254,9 +256,10 @@ Or bypass the helper entirely — use direct Python (preferred for complex extra
 
 ## PITFALL: `page.text` is empty (returns '')
 
-In scrapling 0.4.x, `Response.text` is **empty** for normal HTML pages — `len(page.text) == 0` even
-on a 200 response (verified on quotes.toscrape.com and example.com). Any code that does
+In scrapling 0.4.x **and 0.5**, `Response.text` is empty/absent for normal HTML pages —
+`len(page.text) == 0` even on a 200 response; 0.5 removed the attribute entirely. Any code that does
 `f.write(page.text)` writes an empty file. This is exactly what broke the v1 helper script.
+`len(page.body)` is never empty on success — check that, not `.text`.
 
 Use instead:
 
