@@ -167,6 +167,13 @@ chroot /host /bin/sh -c 'systemctl restart ddnsd; systemctl restart heartbeatd'
 **日志线索**：`grep -iE 'heartbeatd|ddnsd' /var/log/messages` → `DDNS get Ext-IP failed`、`heartbeatd ... failed to send request[0][(null)]` = 更新链路失败。
 **验证外网可达性（在局域网内也能做）**：用公共抓取服务代为请求——`curl -s "https://r.jina.ai/https://<域名>:<端口>/status.php"`；返回内容=通；`TimeoutError` 而当前 IP 直连返回 TLS `ERR_CERT_COMMON_NAME_INVALID`（证书名不匹配=已连上）= 纯 DNS/DDNS 问题。`check-host.net` 没有 IPv6 节点，别用它测 v6。
 
+## 从 Hermes 容器内部动手时的边界（先确认自己在哪）
+**先判断位置**：`cat /proc/1/cgroup` 出现 `/docker/<id>`、`mount` 里 `/opt/data` 源是 `cachedev_*` 的 `@syno/docker` 子卷 → 你正跑在 NAS 上的 hermes-agent 容器里，不是宿主 shell。此时：
+- **宿主 `/volume1..4` 全部不可见**。`mkdir -p /volume4/...` 会“成功”但只写进容器可写层（重启即失），**不要用它冒充交付路径**。容器内唯一持久位置是 `/opt/data`（独立数据卷，本例 3.5T），交付时明确说“容器路径 /opt/data/xxx = NAS docker 共享目录下”，需要宿主绝对路径就让用户确认卷号，别猜。
+- **没有 docker socket**（`/var/run/docker.sock` 不存在），`docker run`/`docker ps` 一律失败；要浏览器/抓取工具直接用容器内已装的二进制（`find / -maxdepth 6 -name chrome` 常见于 `/opt/data/scrapling-browsers/chromium-*/chrome-linux64/chrome`、`/opt/hermes/tools/chromium-*`），不要绕道 docker 镜像。
+- **SSH 到宿主没有授权**：容器内 `~/.ssh/id_ed25519` 不在宿主 `authorized_keys` 里，`tmm@/admin@/root@192.168.1.200|.88` 全部 `Permission denied (publickey,password)`。要改宿主配置只能让用户在 DSM 界面/任务计划执行，或从有权限的另一台机器进来。
+- 交付长任务产物时按“先报告真实路径 + 一句映射说明”，不要因为路径与提示词不符就静默改名。
+
 ## 陷阱速查
 - NAS 上 Hermes 容器（hermes-agent）：真正配置在 `/volume1/docker/hermes/hermes_data/`（HERMES_HOME=/opt/data，属主 10000，tmm 不可读，须 `docker exec hermes-agent` 访问）——**不是** `/volume1/docker/hermes/config.yaml`（那是 4 月的旧文件，勿改）
 - **Hermes v0.20.0+ 启动守卫**：config 里 `messaging.api_server.enabled: true` 时必须配强 `API_SERVER_KEY`（`openssl rand -hex 32` 写入 hermes_data/.env），否则 gateway 直接退出（`Gateway exiting cleanly: API_SERVER_KEY was rejected`），只剩 dashboard 活着。升级后必查

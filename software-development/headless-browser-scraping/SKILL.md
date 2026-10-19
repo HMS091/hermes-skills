@@ -1,0 +1,107 @@
+---
+name: headless-browser-scraping
+description: "Scrape data hidden in JS popovers with headless Playwright."
+version: 1.0.0
+author: Hermes Agent
+license: MIT
+platforms: [linux, macos, windows]
+metadata:
+  hermes:
+    tags: [scraping, playwright, browser, long-running-jobs]
+    related_skills: [scrapling, web-research, blocked-page-recovery]
+---
+
+# 无头浏览器批量抓取（JS 页面里藏的数据）
+
+## When to Use（何时用）
+- 目标数据不在任何 API / HTML 源码里，只在点开/悬浮后才出现的浮层、模态框、tooltip 里。
+- 标的数量上百，单次运行要几小时，中间不能因为一个标的失败就整体卡死。
+- 用户给的是「路径/坐标/选择器」级别的提示词（常来自另一台机器的试探），需要照着实现但要自己验证。
+
+`web-research` / `blocked-page-recovery` 管「打不开怎么办」，`scrapling` 管批量静态抓取；本技能管**必须跑真浏览器 + 要断点续跑**的那一类。
+
+## 0. 先探测，再写正式脚本
+不要在没验证的情况下直接写 400 个标的的生产脚本——错的选择器会浪费几小时。顺序固定：
+1. 单标的 probe：打开页面 → 打印候选元素的 `textContent` + `getBoundingClientRect()`（找标题、图标）→ 点击 → `document.body.innerText` 前后 diff → 截图用视觉确认浮层真的出现了。
+2. 浮层出现后再抓它的 `outerHTML`，从结构里找**语义稳定的选择器**（`div.modal`、`[style*="pre-wrap"]`），不要靠 `innerText.split('\n')` 猜。
+3. 用 2~4 个「已知异常样本」（无简介的、名字和 API id 不一致的、spot 而非 perp 的）验证 null 路径不会误判，再放全量。
+
+## 1. 环境：复用已装 Chromium + `playwright-core`
+先找现成浏览器，别下载整包：
+```bash
+find / -maxdepth 6 -name chrome -type f 2>/dev/null | head
+# 常见：/opt/data/scrapling-browsers/chromium-*/chrome-linux64/chrome、/opt/hermes/tools/chromium-*/
+```
+装最小驱动（不下载浏览器，单包、几十秒）：
+```bash
+cd <脚本目录> && npm init -y && npm i playwright-core
+# 使用：chromium.launch({ executablePath: <上面找到的 chrome>, headless: true,
+#   args: ['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'] })
+```
+- `headless: true` 足够——浮层靠点击触发，不靠真实鼠标轨迹。
+- `--disable-dev-shm-usage` 在容器里必加（/dev/shm 常只有 64MB）。
+- 需要 locale/时区固定时在 `newContext({ locale:'en-US', timezoneId:'UTC' })` 上设，比改系统环境稳。
+
+## 2. `TMPDIR` 必须是可写目录（最常见的「Target crashed」）
+Chromium 在 `TMPDIR` 里建共享内存文件；Hermes 的 scratch 目录常对子进程不可写，页面会直接 `Target crashed` / `Creating shared memory ... failed: Permission denied`。
+```bash
+export TMPDIR=/tmp   # 启动脚本第一行就 export，别依赖继承
+```
+症状对照：`chrome --dump-dom` 能跑但 Playwright `evaluate` 崩、或日志刷 `platform_shared_memory_region_posix` —— 先换 TMPDIR，不要怀疑选择器。
+
+## 3. 定位并点开隐藏浮层
+- **点真元素，别点算出来的坐标**：`img[src^="/coins/"]`、`[aria-label]`、图标节点 → 取其 `getBoundingClientRect()` 中心点击，命中率远高于「标题 left-22」。把提示词里的坐标法留作**第二兜底**（两者都失败才算失败）。
+- 标题/元素定位按「视口左上区域 + 叶子节点 + 文本正则」找，不写死坐标：外层有公告条时 y 会整体下移 30~40px。
+- 点击后**轮询**等浮层（例如 7 × 700ms），不要一次 `waitForTimeout` 睡死；浮层可能在 300ms 或 3s 后出现。
+- 每换一个标的先 `Escape` 关掉上一个浮层再 `goto`——残留模态会吞掉下一次点击。
+
+## 4. 抽取文本：结构化选择器 > innerText 切行
+浮层内通常有「标题行 + 描述块」。优先 `modal.querySelector('div[style*="pre-wrap"]').innerText` 拿原文（保留换行/空格）；兜底才 `innerText.split('\n').slice(1).join('\n')`。
+- 用「文本长度区间 + 排除已知面板关键词（Order Book / Buy / 公告…）+ 宽度区间」筛候选模态框，再取其中最短的那个，能避开包住整页的布局容器。
+- 只存原文，不翻译、不改写缩写（`ADS (NYSE: TSM), representing 5 common shares` 这类原样保留）。
+
+## 5. 校验「抓到的确实是这个标的」
+用**机器标识**校验，不要用展示名：图标 `src` 带 id（`/coins/xyz:SKHX.svg`）、或路由/URL 带 id；展示名会和 API id 不一致（`SKHX` 页面显示 `SKHYNIX-USDC`）。只按标题文本比对会把一整批资产误判成 null。
+
+## 6. 断点续跑骨架（必须，不是加分项）
+- 主状态：`{id: record}` 的 JSON。**每抓到一个立刻**写盘：写临时文件 + `rename` 原子替换。
+- 同时 append-only 写一份 `.jsonl`；JSON 损坏时能重建。
+- 启动先读已有文件，跳过已完成 key；`null` 也算已完成（否则失败项被无限重试，3 小时变 8 小时）。补抓用 `--retry-nulls` 单独一轮。
+- 每标的 3 次尝试，仍失败记 `null` + `note`（写明失败原因），**绝不 raise 到主循环外**。
+- 浏览器每 ~60 个标的重启一次（`close()` + 重新 launch），避免内存爬升和长跑后事件丢失。
+
+## 7. 节奏与资源
+- **单并发**：一个 page 顺序跑。多 tab 并行在长跑场景只会抢内存、更容易被风控。
+- 标的间 sleep 1~2s（带随机）；页面 settle 9~12s（图表/悬浮处理器挂载）。
+- 先算预算再开跑：`标的数 × 单标的秒数`，把小时数写进汇报。20~25s/标的、400+ 标的 ≈ 2.5~3 小时。
+
+## 8. 后台启动 + 一句汇报（用户明确要求）
+用户对长任务的期待是**一行结论**，不是过程直播：`脚本已后台启动，PID=xxx，预计 x 小时，约 HH:MM 完成`。开工前不要逐条播报探测细节。
+```bash
+# 守护脚本（node 崩了自动续跑，本身兼容断点续跑）
+for i in 1 2 3 4 5 6; do node scraper.mjs >> run.log 2>&1; [ $? -eq 0 ] && break; sleep 15; done
+```
+启动用 `terminal(background=true, persist_on_release=true, notify=true)`；45 秒后回读日志确认已落 2~3 条再报 PID，不要「已启动」却其实立刻崩了。
+
+## 9. 停止（用户说「停止所有任务」时）
+- 先杀守护脚本，再杀子进程（node / chrome），最后确认无残留：`pgrep -a node`、`pgrep -c chrome`。僵尸 `[chrome] <defunct>` 不用管。
+- **`pkill -f <pattern>` 会杀掉当前 shell 自己**——Hermes 的包壳命令行里就含这个 pattern，结果是命令以 SIGTERM(-15) 结束、后续清理没执行。正确做法：`pgrep -a node` 看 PID → 按 PID `kill`，且别在同一条命令里写会匹配到自己的字符串。
+- 停止后如实说明：哪些已停、哪些从未创建（例如定时任务没建），不要含糊说「都停了」。
+
+## 10. 产物约定
+- 主文档（供下游直接消费）+ `progress.log`（每 100 条一行：完成/总数、成功、失败、时间）+ `DONE.txt`（总数、成功、失败、起止时间、失败清单）。
+- 标的清单只走 API（枚举接口），不要爬列表页——虚拟滚动会漏项。
+- 先过滤死标的（成交额 > 0），常能砍掉一半运行时间。
+
+## 陷阱速查
+- `TMPDIR` 指向不可写目录 → `Target crashed`，不是选择器问题。
+- 死等 `waitForTimeout(15000)` 再抓 = 慢一倍；改成「轮询标题出现 → 再 settle 一小段」。
+- 只按展示名校验标的 → 名称不一致的资产全变 null（用 id / 图标 src）。
+- 失败重试没上限、或 null 不算完成 → 长跑永远跑不完。
+- 只到最后写整份 JSON → 崩一次全丢；每标的原子写 + jsonl。
+- 用 `pkill -f` 清理 → 自杀式 SIGTERM。
+- 提示词里的「预期行为」（某标的一定抓不到）可能过时——照抓，抓到就是真实数据，记录下来而不是按预期写 null。
+
+## 参考与模板
+- `references/hyperliquid-blurbs.md` — Hyperliquid 币种简介浮层的已验证细节（路由、DOM、spot/perp 差异、API 清单来源）。
+- `templates/resumable-scraper.mjs` — 断点续跑抓取器骨架（原子写、jsonl、重试、浏览器回收、progress/DONE）。
