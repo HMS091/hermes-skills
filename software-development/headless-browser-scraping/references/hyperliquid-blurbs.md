@@ -65,9 +65,11 @@ div.modal（宽 520，锚在鼠标附近）
 | HIP-3 永续 | 基本没有 | `xyz:AVGO`、`para:PAPER`、`mkts:US500`、`io:PRL` 全部无图标 |
 
 - 冒号**保留原样**，不要 percent-encode；用 urllib 时 `quote(id, safe=':@')` 或直接拼字符串。
-- 失败签名：`200 + text/html + 6831B`（SPA 兜底页，正文 `<!DOCTYPE html>`）；偶发 `9894B` 非 SVG。校验 `content-type` 含 `svg` + 正文以 `<svg` 开头 + >150B，三条全过才算成功。
-- 少数 k 前缀永续（`kNEIRO`）用去掉 k 的裸名有图；`kSHIB`、`PEOPLE` 没有。
-- 命中率参考：135 个占位标的里 38 个能补到真图（spot 靠 `_spot` 占绝大多数），97 个失败中 48 个是 HIP-3 前缀、47 个现货无 `_spot` 图标、2 个永续无图标。**这些是站点端确实没图，不是抓失败**，不要反复重试。
+- 失败签名：`200 + text/html + 6831B`（SPA 兜底页，正文 `<!DOCTYPE html>`）。校验 `content-type` 含 `svg` + 正文前 400B 内有 `<svg` + >150B，三条全过才算成功——**不能只看状态码，也不能只看字节数**（`SHIB` 的真图正好 9894B，按大小会误判成兜底页）。
+- id 规则的权威来源是前端 chunk `config-*.js`（主 bundle 里根本没有 `coins` 字面量，必须拉惰性 chunk 才有）：`function z8(e){return e.startsWith('k')&&!e.startsWith('km:')?e.slice(1):e}` 用于永续；现货走 `` `${N8(baseToken,{spotMeta,format:'base'})}_spot` ``，即**用 spotMeta 里该对的 base token 名**加 `_spot`。所以 `kSHIB→SHIB`、`kNEIRO→NEIRO` 都有图，`PEOPLE` 没有。
+- 现货 base 名不等于对名前缀：`USDT0/USDC` 的 token 名是 `USDT` → 要 `USDT_spot.svg`；`AAVE0/USDC`、`AVAX0/USDC`、`BNB0/USDC` 的 token 名本身带 `0` → 要 `AAVE0_spot.svg`。必须以 `spotMeta.tokens` 名为准，别只做字符串裁剪。
+- 前端兜底链 `primary(/coins/<id>.svg) → default(默认图标) → missing` 可以直接证明「站点也没这个图」：这类标的不必再试，报告成硬缺口即可。
+- 补抓结果（135 个占位补到 46 个，297→343，剩 89）：现货 `_spot` 救回 37 个（最大头），`_0/_1` 数字后缀与 k 剥离救回 6 个，`para:ANSEM` 1 个。剩余 89 分布：现货 42（QQQ/SPY/HOOD/MU/NASDAQ 等代币化股票与 memecoin 对）、xyz 22、para 13、io 6、mkts 5、PEOPLE 1，全部是站点端确实没图。
 - 存档布局（logo 相关）：`archive/{pairs,no-blurb,zh}/<COIN>/<COIN>.PLACEHOLDER.svg` + `meta.json`；占位记录只有 `hasLogo:false`，**没有** `logoFile` 键，按文件名 glob 找占位；补图成功后原地覆盖同名文件并写 `hasLogo/logoFile/logoSource/logoBytes`。
 - 分层存档会重复计数：263 个占位文件实际只对应 135 个唯一标的（zh 是翻译副本）。
 
