@@ -35,7 +35,9 @@ div.modal（宽 520，锚在鼠标附近）
 - 点击后 7×700ms 轮询 `div.modal`；已打开的浮层先 `Escape` 再离开页面。
 
 ## 已知差异
-- **现货对基本没有浮层**：图标常是 `/coins/missing.svg`，点开无 modal → 记 null，且不要对 spot 重试 3 次（浪费 40s/个）。
+- **简介文本不在任何接口/JS 里**：抓 `api-ui.hyperliquid.xyz/info` 全量响应体 + 打包 JS 全部 chunk 搜原文（"Satoshi" / "references 1 share"）都是 0 命中；浮层内容由已加载的客户端状态渲染。所以只能点开浮层取，不要浪费时间找接口。
+- **不是每个标的都有浮层**：实测覆盖率 perp 307/341、spot 40/91，总 347/432。缺的（XMR、LIT、SPX、io:ANTH…）点图标**任何 modal 都不出现**，DOM 里也没有描述节点 —— 是真没有，不是抓漏。io: dex 的资产（io:SNDK/ANTH/NBIS/OAI…）基本都没写简介。
+- **现货对里有一部分路由不存在**：`/trade/UUUSPX/USDC`、`/trade/HOOD/USDC` 等会跳回 `/trade` 显示 HYPE-USDC，`/trade/<TOKEN>`、`/trade/@144` 同样跳转 —— 这类无解，记 null 即可（约占现货的 1/6）。
 - **展示名 ≠ API 名**：`xyz:SKHX` 的页面标题是 `SKHYNIX-USDC`，且**确实有简介**（"SKHYNIX references 1 SK hynix Inc. common share (KRX: 000660)…"）。按标题文本比对会把这类全部误杀，改用图标 src 校验。
 - 美股类写法两种，原样保留：
   - `GOOGL references 1 share of Alphabet Inc. Class A common stock (Nasdaq: GOOGL), quoted in USD. …`
@@ -51,3 +53,9 @@ div.modal（宽 520，锚在鼠标附近）
 
 ## 时间基准
 单标的约 20~25s（导航 4s + 标题轮询 + settle 9~12s + 点击/轮询），430 个约 2.5~3 小时。
+实测 432 个跑 6h12m（含失败重试 3 轮），补抓 null 229 个再花 2h10m。想让长跑不偏，就别给 null 标的留 3 次重试：no-modal 只试 1 次（spot）或 2 次（perp）。
+
+## 首轮 50% 全 null 的坑（必看）
+点击坐标若在页面 settle **之前**取（标题 rect / 图标 rect），公告条和图表布局完成后 header 会下移 30~40px，点击全部落空 → 218 个有简介的资产被记成 null。
+修法：settle 之后再 `page.evaluate` 重新读图标 rect 再点，并把 `标题.left-22`、标题中心作为第二/第三兜底。
+判别信号：null 里 `no-modal` 占一半、且按小时均匀分布（不是跑到一半才坏）＝ 坐标过期。
