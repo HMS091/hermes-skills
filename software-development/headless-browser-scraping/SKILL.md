@@ -94,6 +94,7 @@ for i in 1 2 3 4 5 6; do node scraper.mjs >> run.log 2>&1; [ $? -eq 0 ] && break
 - 先过滤死标的（成交额 > 0），常能砍掉一半运行时间。
 
 ## 陷阱速查
+- **坐标必须在 settle 之后重读**：公告条/图表加载完，标题和图标会整体下移 30~40px；用 settle 前取的 rect 点击会整批点空（实测把 218 个有简介的标的误记为 null，多花了 1 轮重跑）。流程：取 rect → 等 9~12s → **再取一次 rect** → 点击。
 - `TMPDIR` 指向不可写目录 → `Target crashed`，不是选择器问题。
 - 死等 `waitForTimeout(15000)` 再抓 = 慢一倍；改成「轮询标题出现 → 再 settle 一小段」。
 - 只按展示名校验标的 → 名称不一致的资产全变 null（用 id / 图标 src）。
