@@ -16,7 +16,8 @@ metadata:
 ## When to Use（何时用）
 - 目标数据不在任何 API / HTML 源码里，只在点开/悬浮后才出现的浮层、模态框、tooltip 里。
 - 标的数量上百，单次运行要几小时，中间不能因为一个标的失败就整体卡死。
-- 用户给的是「路径/坐标/选择器」级别的提示词（常来自另一台机器的试探），需要照着实现但要自己验证。
+- 用户给的是「路径/坐标/选择器」级别的提示词（常来自另一台机器的猜测），需要照着实现但要自己验证。
+- 同一站点的**静态资产**（图标、头像、图片）要批量按 id 下载并校验真伪——这类不需要 Playwright，直接用 HTTP 循环跑第 11 节。
 
 `web-research` / `blocked-page-recovery` 管「打不开怎么办」，`scrapling` 管批量静态抓取；本技能管**必须跑真浏览器 + 要断点续跑**的那一类。
 
@@ -93,6 +94,19 @@ for i in 1 2 3 4 5 6; do node scraper.mjs >> run.log 2>&1; [ $? -eq 0 ] && break
 - 标的清单只走 API（枚举接口），不要爬列表页——虚拟滚动会漏项。
 - 先过滤死标的（成交额 > 0），常能砍掉一半运行时间。
 
+## 11. 静态资产下载（CDN 图标/图片）：200 不等于「有文件」
+图标、头像这类按 id 取的文件端点**不需要浏览器**，直接 HTTP 循环下载即可；但 SPA 站点对不存在的路径会返回 **200 + 兜底 HTML 页**，状态码完全不可信。
+- 校验三件套（缺一不可）：`content-type` 含目标类型（`svg`/`image`）、正文 magic bytes 对得上（`<svg`、`\x89PNG`）、字节数 > 阈值（占位/兜底页常见 100~500B 或整页 6~7KB）。只写 `if resp.ok` 会把几 KB 的 HTML 当图存进去。
+- 先摸平台命名约定，再定 id：同一资产在列表页、API、图标路径里可能三个名字。图标常常是 `<BASE>_spot` 这种**后缀约定**（现货）或带 dex 前缀的裸名（`xyz:AVGO`，分隔符**不要** percent-encode）。
+- 一个标的只试 1~2 个候选 id（约定名 + 去前缀/去后缀的变体）。生成几十个变体轮询是纯浪费：站点没有的图标怎么变都没有，实测一次 135 个占位只新增 38 个。
+- 并发 5~8 + 每请求 15~20s 超时 + 2 次重试足够；超时/连接重置是常态，别当成「站点封了」。
+- 占位文件的识别靠**文件名 glob**（`*.PLACEHOLDER.svg`），不要靠元数据字段——占位记录的 meta 往往连 `logoFile` 键都没有，按字段筛会得到 0 条而误判「已全部补齐」。
+- 分层存档（`raw/` + 按类别分类的副本 + 翻译副本）同一个占位会被数好几遍：先按标的 id 去重再报「还有多少」。
+- 覆盖前先 `tar czf backup/placeholders_before_$(date +%Y%m%d_%H%M%S).tar.gz <占位清单>`——原地覆盖不可逆。
+- 用户说「覆盖同名占位文件」就是**原地覆盖、文件名不变**，不要顺手重命名成 `<stem>.svg`；把 `hasLogo:true / logoSource / logoBytes` 写进 meta，让消费方照 `logoFile` 读。
+- 收尾必做两类回读校验：逐文件（magic bytes、尺寸、不含占位标记语如 `NO LOGO`、大小与记录一致、meta 与磁盘一致）+ 逐成员（`tar tzf` 数量、成员正文再验一遍 magic bytes，防占位混进交付包）。
+- 交付汇报格式：新增成功数 / 仍失败数 + 失败名单前 20 + 失败原因分类 + 包路径 + 字节数 + 成员数 + md5。只说「已打包」不算完成。
+
 ## 陷阱速查
 - **坐标必须在 settle 之后重读**：公告条/图表加载完，标题和图标会整体下移 30~40px；用 settle 前取的 rect 点击会整批点空（实测把 218 个有简介的标的误记为 null，多花了 1 轮重跑）。流程：取 rect → 等 9~12s → **再取一次 rect** → 点击。
 - `TMPDIR` 指向不可写目录 → `Target crashed`，不是选择器问题。
@@ -102,7 +116,10 @@ for i in 1 2 3 4 5 6; do node scraper.mjs >> run.log 2>&1; [ $? -eq 0 ] && break
 - 只到最后写整份 JSON → 崩一次全丢；每标的原子写 + jsonl。
 - 用 `pkill -f` 清理 → 自杀式 SIGTERM。
 - 提示词里的「预期行为」（某标的一定抓不到）可能过时——照抓，抓到就是真实数据，记录下来而不是按预期写 null。
+- 把 `200 OK` 当「下载成功」→ 存进去的是 SPA 兜底 HTML（常见 6831B）；必须验 content-type + magic bytes + 长度。
+- 按元数据字段筛占位 → 占位记录没有 `logoFile` 键，筛出 0 条，误报「全部补齐」。
 
 ## 参考与模板
-- `references/hyperliquid-blurbs.md` — Hyperliquid 币种简介浮层的已验证细节（路由、DOM、spot/perp 差异、API 清单来源）。
+- `references/hyperliquid-blurbs.md` — Hyperliquid 的已验证细节：清单 API、简介浮层 DOM、路由、spot/perp 差异，以及 logo CDN（`/coins/<id>.svg`、`_spot` 约定、占位/失败签名）。
 - `templates/resumable-scraper.mjs` — 断点续跑抓取器骨架（原子写、jsonl、重试、浏览器回收、progress/DONE）。
+- `scripts/backfill_asset_icons.py` — 占位图标批量回填器（严格 SVG 校验、现货 `_spot` 候选、原地覆盖、dry-run 默认、结果 JSON）。

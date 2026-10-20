@@ -55,6 +55,22 @@ div.modal（宽 520，锚在鼠标附近）
 单标的约 20~25s（导航 4s + 标题轮询 + settle 9~12s + 点击/轮询），430 个约 2.5~3 小时。
 实测 432 个跑 6h12m（含失败重试 3 轮），补抓 null 229 个再花 2h10m。想让长跑不偏，就别给 null 标的留 3 次重试：no-modal 只试 1 次（spot）或 2 次（perp）。
 
+## Logo（图标 CDN，无需浏览器）
+`GET https://app.hyperliquid.xyz/coins/<id>.svg`，纯 HTTP 即可，别开 Chromium。
+
+| 标的类型 | 图标 id | 例子 |
+|---|---|---|
+| 主流永续 | 裸币名 | `BTC.svg`、`USDH.svg` |
+| 现货对 | `<BASE>_spot` | `WOW_spot.svg`、`FEUSD_spot.svg`、`AVAX0_spot.svg` |
+| HIP-3 永续 | 基本没有 | `xyz:AVGO`、`para:PAPER`、`mkts:US500`、`io:PRL` 全部无图标 |
+
+- 冒号**保留原样**，不要 percent-encode；用 urllib 时 `quote(id, safe=':@')` 或直接拼字符串。
+- 失败签名：`200 + text/html + 6831B`（SPA 兜底页，正文 `<!DOCTYPE html>`）；偶发 `9894B` 非 SVG。校验 `content-type` 含 `svg` + 正文以 `<svg` 开头 + >150B，三条全过才算成功。
+- 少数 k 前缀永续（`kNEIRO`）用去掉 k 的裸名有图；`kSHIB`、`PEOPLE` 没有。
+- 命中率参考：135 个占位标的里 38 个能补到真图（spot 靠 `_spot` 占绝大多数），97 个失败中 48 个是 HIP-3 前缀、47 个现货无 `_spot` 图标、2 个永续无图标。**这些是站点端确实没图，不是抓失败**，不要反复重试。
+- 存档布局（logo 相关）：`archive/{pairs,no-blurb,zh}/<COIN>/<COIN>.PLACEHOLDER.svg` + `meta.json`；占位记录只有 `hasLogo:false`，**没有** `logoFile` 键，按文件名 glob 找占位；补图成功后原地覆盖同名文件并写 `hasLogo/logoFile/logoSource/logoBytes`。
+- 分层存档会重复计数：263 个占位文件实际只对应 135 个唯一标的（zh 是翻译副本）。
+
 ## 首轮 50% 全 null 的坑（必看）
 点击坐标若在页面 settle **之前**取（标题 rect / 图标 rect），公告条和图表布局完成后 header 会下移 30~40px，点击全部落空 → 218 个有简介的资产被记成 null。
 修法：settle 之后再 `page.evaluate` 重新读图标 rect 再点，并把 `标题.left-22`、标题中心作为第二/第三兜底。
