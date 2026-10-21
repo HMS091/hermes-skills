@@ -13,19 +13,61 @@ metadata:
 
 REA (GitHub `morluto/rea`, npm `rea-agents`, MIT) is a 200+ tool binary/RE analysis MCP server. Unconfigured its tool schemas are ~830k tokens; the two schema-profile env vars below cut that to ~55k.
 
-## Using REA from Hermes (no native MCP tools — do NOT register the full server)
+## Using REA from Hermes (registered natively — cheap, because of tool search)
 
-On this box REA is installed globally and registered **only** in Claude Code's user config. Hermes' own `mcp_servers` deliberately excludes it: 207 tools would burn ~55k tokens of schema every turn. Call it on demand instead — zero schema cost, all 207 tools reachable:
+REA is registered in BOTH clients on this box:
+
+| Client | Where | Tools |
+|---|---|---|
+| Claude Code | `~/.claude.json` (user scope) | `mcp__rea__*`, 207 |
+| Hermes | `config.yaml → mcp_servers.rea` + `platform_toolsets.cli` | `mcp__rea__*`, **209** (207 tools + `list_prompts` / `get_prompt` prompt accessors) |
+
+Hermes' Tool Search assembly keeps only ~21 tools inline (~12k tokens) and defers the rest, so 209 REA tools cost **~0 tokens per turn** (raw would be ~70k). They are pulled on demand via `tool_search` → `tool_describe` → `tool_call`. In a Claude Code session the equivalent is `ToolSearch` + `select:mcp__rea__<tool>`.
+
+Registering (Hermes) — the prompt is interactive, so pipe the answer:
 
 ```bash
-node ~/.hermes/scripts/rea_call.mjs --list <keyword>      # search 207 tool names/descriptions
-node ~/.hermes/scripts/rea_call.mjs --schema <tool>       # one tool's input schema
-node ~/.hermes/scripts/rea_call.mjs <tool> '<json args>'  # call it (900 s timeout)
+cd /opt/data && export HERMES_HOME=/opt/data
+printf 'Y\n' | /opt/hermes/.venv/bin/hermes mcp add rea \
+  --command /opt/hermes/tools/node-26.7.0-linux-x64/bin/node \
+  --connect-timeout 120 \
+  --env REA_MCP_INPUT_SCHEMA_PROFILE=compact REA_MCP_OUTPUT_SCHEMA_PROFILE=off \
+  --args /opt/hermes/tools/node-26.7.0-linux-x64/lib/node_modules/rea-agents/scripts/rea.mjs mcp
+/opt/hermes/.venv/bin/hermes config set mcp_servers.rea.timeout 900   # add sets no timeout (default 120 s!)
 ```
 
-Verified: `open_binary` on an ELF returns `sha256` matching `sha256sum` in ~150 ms; cold start ~5 s per call. State does not persist between invocations (each call opens and closes a server), so open → analyze → close must happen inside ONE script call when state matters — extend `rea_call.mjs` with a `--script` mode rather than chaining separate CLI calls.
+`hermes mcp add` writes `207/207 tools enabled` and needs a **new session** (or `/reload-mcp`) to go live. Verify without a model call:
 
-Only register it natively (Hermes `mcp_servers:` + `platform_toolsets`) if a long interactive RE session genuinely needs it, and expect a big per-turn schema bill.
+```bash
+HERMES_HOME=/opt/data /opt/hermes/.venv/bin/python -c "
+import os,sys; sys.path.insert(0,'/opt/hermes')
+from tools.mcp_tool_discovery import discover_mcp_tools
+n=discover_mcp_tools(); print(len([x for x in n if x.startswith('mcp__rea__')]))"   # -> 209
+```
+
+On-demand single call, no session needed (all 209 reachable, zero schema cost):
+
+```bash
+node ~/.hermes/scripts/rea_call.mjs --list <keyword>      # search tool names/descriptions
+node ~/.hermes/scripts/rea_call.mjs --schema <tool>       # one tool's input schema
+node ~/.hermes/scripts/rea_call.mjs <tool> '<json args>'  # call it
+```
+
+State does not persist between separate `rea_call.mjs` invocations (each spawns and drops a server); multi-step open→analyze→close belongs in one script. Native tools inside a live Hermes session do persist.
+
+## Keeping it updated (cron)
+
+`/opt/data/scripts/rea_update_apply.sh` (cron, `no_agent`, job id `1b71bc2f4ef2`, daily `0 1 * * *` = 09:00 Beijing, deliver=all) runs `rea_update_check.sh`:
+
+1. compares `rea --version` against `npm view rea-agents version`;
+2. if newer, `npm install -g --allow-scripts=frida rea-agents@<latest>`;
+3. self-tests: version matches AND `rea_call.mjs --list` still reports ≥200 tools;
+4. on any failure, re-installs the previous version (rollback);
+5. on success, deletes `/opt/data/cache/mcp_schema_cache.json` so the next Hermes session re-discovers tools.
+
+Run it by hand any time: `/opt/data/scripts/rea_update_apply.sh` (add nothing for a report-only pass: `/opt/data/scripts/rea_update_check.sh`). Log: `/opt/data/logs/rea-update.log`.
+
+Cron scripts must live in `/opt/data/scripts/` (absolute paths are rejected); the wrapper exists because cron cannot pass arguments.
 
 ## Install
 
@@ -70,5 +112,7 @@ Standalone server check without any client: spawn `node <rea.mjs> mcp` with the 
 - **npm 12 blocks install scripts** (`install-scripts` warning). `@anthropic-ai/claude-code` installs a `claude` symlink that points at `claude.exe` — a 290 MB *Linux* binary in the package, the name is just odd. If the CLI misbehaves, reinstall with `npm install -g --allow-scripts=<pkg> <pkg>`.
 - `rea-agents` ships `frida`; its postinstall is blocked the same way, so `require('frida')` throws *Could not locate the bindings file*. Reinstall with `npm install -g --allow-scripts=frida rea-agents`; check via `node -e "console.log(typeof require('frida').getLocalDevice)"` run from the package dir. Never `require('frida/package.json')` — its `exports` map forbids it.
 - **`--dangerously-skip-permissions` is refused when running as root** (`cannot be used with root/sudo privileges`). In print mode use `--allowedTools "Bash,ToolSearch,mcp__rea__<tool>"`; that auto-approves exactly those tools.
-- Claude Code truncates MCP tool descriptions to 4096 chars (`description truncated from N to 4096`) — harmless.
+- **Claude Code truncates MCP tool descriptions** to 4096 chars (`description truncated from N to 4096`) — harmless.
+- **The agent's `write_file`/`patch` refuse `config.yaml`** (`Refusing to write to Hermes config file`). Route every MCP/config change through `hermes mcp add|remove` and `hermes config set` — never hand-edit.
+- **209 ≠ 207**: Hermes also registers the server's MCP *prompts* as `mcp__rea__list_prompts` / `get_prompt`. The Claude Code tool count stays 207.
 - No Anthropic login on a headless box? Verification sessions can run against an Anthropic-compatible endpoint, e.g. DeepSeek: `ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic`, `ANTHROPIC_AUTH_TOKEN=<key>`, `ANTHROPIC_MODEL=deepseek-chat`. The CLI warns `unrecognized_model` (assumes 200k window) but works. Real fix for the user: `claude auth login`.
