@@ -20,6 +20,7 @@ Someone hands you a repo, a release binary, or an "install this" gadget and asks
 1. **作者有没有恶意** (backdoor / exfiltration / telemetry)
 2. **能不能被攻破** (exploitable weakness in the shipped build)
 3. **靠不靠得住** (fragility, single point of failure, silent failure modes)
+4. **能不能拿来卖** (licence contagion) — only when the user may ship it inside a product. AGPL/SSPL on a component that runs server-side means "open-source your whole backend"; say it in one line before they build a business on it, not after.
 
 Answering only #1 and calling it "safe" is the failure this skill exists to prevent.
 
@@ -61,6 +62,16 @@ grep -rInE "beginPacket|HTTPClient|http\.begin|requests\.(get|post)|fetch\(|net\
 Present this as a table the user can check line by line: **出站行为 | 位置 file:line | 判定**. A backdoor hides as one more `http.begin()` among ten; the table is what makes "only three outbound channels exist" a claim you can defend. Zero external hostnames in the binary strings is a *strong negative finding* — state it as evidence, not as a feeling.
 
 Do not put destructive-command literals (`rm -rf`, etc.) inside a grep pattern: the terminal hardline guard blocks the entire call and you lose the scan. Enumerate `os.system`/`subprocess`/`exec` instead.
+
+#### Telemetry and crash reporting (CLI / desktop / server binaries)
+
+When the subject is a dev tool rather than an IoT device, the "恶意" question reduces to two channels — usage telemetry and crash upload — and both are usually present and *on by default*. Audit them as a three-column table the user can read: **端点 | 触发条件 | 传什么**. Then do these three things the source alone will not settle:
+
+1. **Read the event serializers, not the sender.** Whether telemetry is *bad* depends entirely on which fields reach the wire. Grep the event union/struct and list the fields explicitly; "sends usage data" is useless, "sends a persistent UUID + version + call counts, **not the URL or arguments** " is a verdict. A negative field finding (no URL, no page content, no query params) is the strongest reassurance you can hand the user — state it as evidence.
+2. **Prove the disable switch is real by A/B on an artifact.** Find something the binary writes only when telemetry is enabled (install-id file, consent file, config key), then run once with the switch unset and once set, and diff what appears on disk. This turns "the env var should work" into "verified: 1 file vs 0 files". If you must run the binary before finding the switch, say so afterwards — an unset-var run already phoned home, and the user is entitled to know that one ping happened.
+3. **Check what the crash path ships.** Crash reporters commonly 1) shell out to system `curl`/`wget` and 2) upload the full stack plus panic arguments. Look for an explicit redaction of url/token/file fields; if the author redacted them, credit it. If not, the core dump is the bigger leak — a default-on core dump holds page content, cookies, and form values, so check for a disable flag and set it.
+
+Always end this section with the env vars that turn both off, written as copy-pasteable lines, and put them in the config's `env:` block (not just the shell) for anything that runs as a service or MCP server.
 
 ### 3. Date every committed binary — the highest-yield check
 
@@ -153,7 +164,7 @@ A filter running but not blocking is the common case (lists not enabled), and it
 
 Chinese, 结论先行, tables over prose, every claim carrying a number or a `path:line`:
 
-1. **一、结论** — 4–6 row table: 有后门吗 / 代码质量 / 安全性 / 能否跑在我的设备上. Verdict words, not adjectives.
+1. **一、结论** — 4–6 row table: 有后门吗 / 代码质量 / 安全性 / 能否跑在我的设备上 / 能不能商用. Verdict words, not adjectives.
 2. **二、它到底是什么** — the mechanism in ≤10 lines, plus the honest limitation of the approach.
 3. **三、后门审计** — outbound channel table with file:line + what the binary strings showed + git history result + artifact integrity numbers.
 4. **四、问题（按严重程度）** — 🔴/🟠/🟡, each with location, mechanism, blast radius, and the concrete fix. Rank by what an attacker gets (RCE > device takeover > MITM data swap > info leak > DoS).
@@ -172,6 +183,8 @@ Never soften a serious finding to be polite, and never inflate a low-severity on
 6. **Don't put destructive-command literals in grep patterns** — the hardline guard blocks the whole call; scan for `eval`/`subprocess`/`os.system` instead.
 7. **Cloning into the workspace and reading it whole beats clever greps** — for anything under ~2k lines, grep misses intent; comments in these repos often name the vulnerability they fixed, which is how you date the binary.
 8. **Don't recommend hardware before checking what they already run** — probe NAS ports/containers and router first; a price-sensitive user will not thank you for a $20 dongle that duplicates a service they already own and never configured.
+9. **Never kill processes with a pattern match during housekeeping** — `pkill -f <download>` and friends trip the destructive-command guard, which blocks the *whole* call and burns the scan you were in the middle of. Stop jobs through the tracked background-process manager; keep audit calls read-only.
+10. **A vendor with no checksum is not a backdoor** — missing signatures mean "cannot prove binary == source", which is a real caveat and a 🟠 at most. Record the sha256 you actually downloaded, tell the user to reinstall only from the official release, and do not let it contaminate the malicious-intent verdict.
 
 ## References
 
