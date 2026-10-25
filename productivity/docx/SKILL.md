@@ -55,6 +55,7 @@ python scripts/docx_template.py tpl.docx values.json filled.docx
 python scripts/docx_revisions.py list out.docx
 python scripts/docx_comments.py list out.docx
 python scripts/docx_validate.py out.docx
+python scripts/set_eastasia_font.py 微软雅黑 out.docx
 ```
 
 ## Quick Reference
@@ -180,6 +181,11 @@ cannot render PDFs, and layout fidelity requires a real renderer.
   python-docx); raw text substitution in `document.xml` corrupts files
   easily. Use `patch`/`write_file` only for the JSON inputs, never on the
   `.docx` itself.
+- **CJK fonts: create-spec styles only set ascii/hAnsi.** Chinese text
+  renders in Word's default East Asian font (宋体/等线) unless
+  `w:rFonts/@w:eastAsia` is set — the spec's `font` field does not do it.
+  After creating any CJK document, run `scripts/set_eastasia_font.py
+  微软雅黑 out.docx` (sets eastAsia on every defined style).
 
 ## Verification
 

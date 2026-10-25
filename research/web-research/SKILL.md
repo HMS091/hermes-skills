@@ -57,8 +57,10 @@ curl -s -m 90 "https://r.jina.ai/https://x.com/用户名/status/帖子ID"
 - jina 匿名限流 401 时：sleep 5~10 秒重试单条，或改走直接 curl
 - 抓取目标站前先 `wc -c` 判断长度（0 字节=被挡/域名失效），别浪费 python 处理
 - 调研结论要标注来源+日期（文章发布日期≠事件日期，事件时间线要单独梳理）
+- **融资聚合站的同名混淆**：多个同名公司（如「Axiom」法律科技 vs 「Axiom Trade」交易终端）会被融资数据库合并成一家，轮次/金额/投资方全部串线。看到融资数据与已知轮次严重不符时，回 YC 公司页、Sacra 或官方公告核实体，并在报告里点名纠正——一字之差差一个数量级
 
 ## 参考文件
 - `references/business-company-research.md` — 公司/产品尽调：多源三角验证、实体与融资口径，以及**资金流/支付通道核验**（用户问「他们支付宝/微信怎么入金的」时先看这一节）
 - `references/software-app-vetting.md` — App/软件尽调全流程：GitHub→代码→商店三区元数据→二进制校验→报告结构
+- `references/crypto-trading-terminal-research.md` — Web3 交易终端/DeFi 项目尽调：链上费用/收入数据源地图、口径陷阱（fees≠revenue、同名公司混淆）、YC 公司页用法、开发成本与合规基准
 - `references/giffgaff-roaming-ban-2026.md` — 2026年7-8月 giffgaff 长期漫游封号事件完整调研（邮件原文、检测机制、退款/申诉窗口、无邮件应对、替代运营商、来源列表），用户问"我有卡怎么办"时直接引用
