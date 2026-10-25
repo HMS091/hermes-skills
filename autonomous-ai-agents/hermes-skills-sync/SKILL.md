@@ -148,6 +148,40 @@ Or exit and relaunch Hermes.
 
 > **Common gotcha:** The user may expect skills to be immediately available after syncing. Explicitly tell them to `/reset` (or start a new `hermes` session) for the skills to show up in the skills list.
 
+## Publishing: Proving the Push Landed, and Making It Portable
+
+Two things the setup workflow never checks: whether the push actually reached the remote, and whether a cloning agent can *use* what it pulled. Both get asked the moment the user says "这样其他智能体也能用".
+
+### Verify against the remote, not against a status file
+
+```bash
+cd /opt/data/skills
+git status --porcelain | wc -l                    # expect 0 — a dirty tree means the commit step hasn't run
+git rev-parse HEAD; git ls-remote origin HEAD     # SHAs must match exactly
+git ls-tree -r origin/main --name-only | grep -i <skill>   # the file is in the pushed tree
+```
+
+Then confirm one file through the API, comparing **size**, not mere presence:
+
+```bash
+TOKEN=$(git remote get-url origin | sed 's#.*:\([^@]*\)@.*#\1#')
+curl -s -H "Authorization: token $TOKEN" \
+  "https://api.github.com/repos/<owner>/<repo>/contents/<cat>/<skill>/SKILL.md" \
+  | python3 -c "import json,sys;d=json.load(sys.stdin);print(d['size'],d['download_url'])"
+wc -c <cat>/<skill>/SKILL.md                     # must equal the API size
+```
+
+**Never answer "is it synced?" from a status artifact.** A `manifests/sync-status.json` — or any hand-written `verified` line — drifts silently: it can read months stale while hourly syncs are green (false alarm), and a fresh-looking one proves nothing because no step regenerates it. Compare HEADs and file sizes; that is the only evidence. Also state the mechanism (job name, schedule, last status from `cronjob action='list'`) so the answer shows *why* it stays synced, not just that it is once.
+
+### Portability — what "other agents can use it" actually requires
+
+A skill whose body is a transcript of *this* box is not reusable when cloned. `/opt/data/<name>-venv`, `/usr/local/bin/<wrapper>`, `/opt/data/<name>-browsers` are local facts, not instructions; a cloning agent follows them literally and dies on `ModuleNotFoundError` or `No such file or directory`.
+
+- Before claiming a skill is "available to other agents", grep its body: `grep -n '/opt/\|/usr/local/\|C:\\' SKILL.md`. Every hit is a portability debt — report it rather than hiding it.
+- Keep the generalizable part (decision tree, pitfalls, prompt formats) machine-independent. Put local paths in the frontmatter `metadata.hermes` block, where they read as setup state instead of procedure.
+- Add a short "cross-machine install" section naming the install command and the three or four paths a reader must edit on their own machine.
+- Strip cron assumptions too: a cloned job with `deliver=all` resolves to no target on a machine with no connected platform — it runs, saves output, and notifies nobody. Set an explicit platform or say plainly that delivery is local-only.
+
 ## Post-Sync: Scanning & Categorizing the Library
 
 After syncing, inventory the new skills to understand what's available.

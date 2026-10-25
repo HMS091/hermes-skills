@@ -353,6 +353,26 @@ When the user asks to **investigate a specific open-source tool** — how it wor
 
 ### Workflow
 
+#### Phase 0: Host-Fit Gate — measure the machine before you analyze the tool
+
+Run the measurement first. A host mismatch settles the verdict in one minute and reframes the rest of the report as "what would it take". Record real numbers, never the vendor's stated requirements.
+
+```bash
+grep -m1 'model name' /proc/cpuinfo; nproc
+free -g | head -2
+nvidia-smi 2>&1 | head -3; ls /dev/dri 2>&1     # no /dev/dri + no nvidia-smi = no GPU at all
+echo "DISPLAY=${DISPLAY:-<empty>}"               # empty = headless, there is no desktop to drive
+docker ps >/dev/null 2>&1 && echo docker-ok || echo no-docker
+```
+
+| Gate | Fails when | Instantly disqualifies |
+|---|---|---|
+| Display | `DISPLAY` empty, no X/Wayland session | every computer-use / GUI-VLA / screenshot-driven agent — a screen is its input |
+| Accelerator | no `/dev/dri`, no `nvidia-smi` | any local VLM or diffusion model; a 4B VLM on a 4-core Celeron is tens of seconds per step, i.e. unusable in a loop |
+| Platform binding | the "local mode" is MLX / CoreML / Metal | anything whose private path is Apple-Silicon-only — the cloud fallback that remains is a different product |
+
+A tool that passes none of these still gets a full report, but the verdict is "cannot run here" **plus** the one purchase that would change it and whether it pays back. Do not soften that into "could be interesting".
+
 #### Phase 1: Basic Reconnaissance
 
 ```bash
@@ -894,3 +914,6 @@ See `references/warp-clash-api-viability-202607.md` for a practical case study o
 
 15. **fork:star above ~20% marks hype, not adoption** — healthy repos sit at 5–15%. Check `subscribers_count` alongside stars, and quote an independent hands-on test before the repo's own feature list. Star charts trend on attention, which is not the same as a working tool.
 16. **Never quote a vendor's tool or feature count** — enumerate it (`tools/list` for MCP servers, `--help`/`capabilities` for CLIs). A stale number in the report discredits the tested findings next to it.
+17. **Read the qualifier inside a benchmark claim.** "#1 on OSWorld (specialized, 58.2%)" is first place on a *sub-track*, not the general leaderboard — headline marketing drops the parenthetical. Quote the number with its qualifier, and check it against the general-track state of the art before repeating "world #1" in a report.
+18. **"Runs locally / private" is a platform claim, not a privacy claim.** Check what the non-local mode transmits: a CUA-style tool's cloud mode uploads every screenshot, so "evaluate" on a machine holding the user's broker, bank and GitHub sessions means handing those screens to a third party. State that explicitly — this user weighs privacy risk against price.
+19. **Weigh the capability against the channel already available.** GUI automation burns one vision inference per step and is the most expensive way to touch data; when the target has an API, an HTTP fetcher, or a browser tool, the GUI path is a regression even when it works. Name the single scenario where it is the only option (legacy desktop software with no API) instead of recommending it generally.
