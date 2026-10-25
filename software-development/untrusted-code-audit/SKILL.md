@@ -189,5 +189,6 @@ Never soften a serious finding to be polite, and never inflate a low-severity on
 ## References
 
 - `references/artifact-and-binary-forensics.md` — strings/marker recipes, blocklist integrity verification, DNS reply parsing.
+- `references/crypto-trading-repo-audit.md` — trading bot/CLI extras: hidden-fee scans, official tip-account registry check, provider call-site inventory, and the 2026 open-source landscape verdict (no platform engine exists; which repos are usable execution-layer bases).
 - `scripts/verify_hash_blocklist.py` — check a truncated-hash blocklist (sorted, dupes, membership spot-checks).
 - `scripts/check_dns_blocking.py` — ask a resolver whether it really blocks a domain.

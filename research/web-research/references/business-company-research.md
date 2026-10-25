@@ -253,6 +253,10 @@ for page in doc:
 
 **融资口径陷阱**：中文稿普遍把「估值 $X」写成「融资 $X」。以官方英文原文用词为准（valuation vs raise），这一字之差能差一个数量级，发现媒体互抄错误要在报告里点名。
 
+**同名实体混淆**：多个无关公司共用一个名字时（如交易终端 Axiom vs 欧洲法律科技 Axiom），融资数据库会把各家的轮次合并虚报——引用任何融资额前先核对 YC 公司页/Sacra/官方披露的唯一披露轮次，并把错误口径在报告里点名。
+
+**加密项目收入三口径**：手续费（fees，用户支付总额）vs 收入（revenue，扣除返佣后）vs 快照日期；再加 DeFiLlama 适配器起始日不回溯历史——同一平台不同口径能差一倍。引用时全部标注「口径+读取日期」，不要混写。
+
 ## Pitfalls
 
 - **Cloudflare on main domains**: saily.com, surfshark.com, hvmn.com all block curl. The press release subdomains (finance.yahoo.com, nordsecurity.com/press-area/) usually don't.
