@@ -305,6 +305,23 @@ When a vendor pack lands (e.g. a 77-skill PM methodology library) and every skil
 
 **Pitfall — never insert text by anchoring on `^# `.** Skill bodies embed templates in fenced blocks that start with `# ` (```` ```markdown # TAM/SAM/SOM Analysis ````), so the note lands inside the example the skill emits. Insert after the frontmatter's closing `---` instead, then assert the body's first line is the note.
 
+**Pitfall — a global regex that strips frontmatter deletes the body's horizontal rules.**
+`re.sub(r'^---.*?^---\s*\n', '', text, flags=re.S|re.M)` has no `count`, so it pairs up **every**
+`---` block in the file: each `---` section divider in the body becomes a "frontmatter" opener and
+swallows the text down to the next one. The write succeeds, the file looks plausible, and roughly
+half the content is silently gone — which is exactly the failure mode after importing an upstream
+skill verbatim. Match once, anchored at the start:
+
+```python
+m = re.match(r'\A---\n.*?\n---\n', text, flags=re.S)
+body = text[m.end():]                      # m is None if the file has no frontmatter — assert it
+```
+
+Then **prove the body survived** instead of trusting the write: `body.strip() in installed`, and
+`text.count('\n## ')` / `text.count('|---')` equal in upstream and installed. Char count alone is
+not enough (it moves legitimately when you rewrite the description), but a *halved* char count is
+the tell.
+
 Recipes (scan, archive, annotate, verify) live in `references/library-dedupe-and-prune.md`; run `scripts/skills_library_audit.py` for the one-command version (similar pairs + dangling `related_skills` + counts).
 
 **Pitfall — git config before commit:** When `git commit` fails with `Author identity unknown`, set local git config:

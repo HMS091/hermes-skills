@@ -160,6 +160,25 @@ python3 scripts/check_dns_blocking.py <resolver-ip> doubleclick.net googleadserv
 
 A filter running but not blocking is the common case (lists not enabled), and it is worth more to the user than any hardware advice. Compare in a table: **他已有的 vs 要买的那台** — 成本(0 优先)、容量、是否支持正则/白名单/DoH/缓存/分设备策略、功耗、单点故障、有线还是 2.4G 单链路。Then state the ceiling of the whole approach (DNS filtering cannot block in-feed/video ads that share the content domain) so the recommendation does not read as a magic fix.
 
+### 10. Markdown-only subjects: skills, rule packs, prompt files
+
+When the payload is `SKILL.md`-style text and nothing else, skip steps 3–6 (no binary to date, no
+artifacts to verify) and audit the text instead: behavioural grep for shell-out/eval/credential
+vocabulary, an invisible-character scan, a check for instructions that put the file above the user
+or fetch remote instructions, and the licence chain. The deliverable also shifts — the user is not
+asking "run this safely", they are asking "install this into my library or not", so the answer ends
+with an install decision and a body-integrity proof. Full command set, the three standing false
+positives, and the report shape: `references/agent-skill-and-prompt-file-audit.md`.
+
+Two rules that decide the install:
+
+- **A rule-strong skill is not neutral tooling.** "Never use Inter", "this file wins over framework
+  defaults" rewrites your defaults on every later design turn. That is a fit question, not a
+  security one — report it as such and say one line will change it.
+- **Keep the body byte-for-byte; rewrite only the frontmatter description.** Upstream descriptions
+  run hundreds of characters and bloat the always-loaded skill index; the body is the thing under
+  audit and must stay identical so a later re-sync is diffable.
+
 ## Report Shape (this user)
 
 Chinese, 结论先行, tables over prose, every claim carrying a number or a `path:line`:
@@ -189,6 +208,7 @@ Never soften a serious finding to be polite, and never inflate a low-severity on
 ## References
 
 - `references/artifact-and-binary-forensics.md` — strings/marker recipes, blocklist integrity verification, DNS reply parsing.
+- `references/agent-skill-and-prompt-file-audit.md` — markdown-only subjects (skills, prompt/rule packs): behavioral + invisible-character scan, prompt-injection and licence checks, install + body-integrity proof.
 - `references/crypto-trading-repo-audit.md` — trading bot/CLI extras: hidden-fee scans, official tip-account registry check, provider call-site inventory, and the 2026 open-source landscape verdict (no platform engine exists; which repos are usable execution-layer bases).
 - `scripts/verify_hash_blocklist.py` — check a truncated-hash blocklist (sorted, dupes, membership spot-checks).
 - `scripts/check_dns_blocking.py` — ask a resolver whether it really blocks a domain.
