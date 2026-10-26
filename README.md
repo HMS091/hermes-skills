@@ -6,6 +6,15 @@
 > `product-management/` 目录是第三方作品，来自 [deanpeters/Product-Manager-Skills](https://github.com/deanpeters/Product-Manager-Skills)（v0.84，作者 Dean Peters），采用 **CC BY-NC-SA 4.0**：署名、**禁止商业使用**、改编需同方式共享。详见该目录下的 `ATTRIBUTION.md` 与 `LICENSE-CC-BY-NC-SA-4.0.txt`。
 > 该目录是**独立聚合**，不改编、不影响仓库内其他自制技能的授权；但**不要把本目录内容用于任何商业产品或付费交付**。
 
+## 新增技能（2026-10-26）
+
+| 技能 | 来源 | 许可 | 依赖 |
+|---|---|---|---|
+| `creative/landing-page-design` | [elayadesign/ai-design-skills](https://github.com/elayadesign/ai-design-skills) | MIT | 无 |
+| `creative/design-to-motion` | 同上 | MIT | Figma Personal Access Token、Playwright（`pip install playwright && playwright install chromium`）、ffmpeg |
+
+两者正文为上游原文，仅替换 frontmatter 的 `name`/`description`（原描述 700+ 字符会撑爆技能索引），因此后续可直接 diff 上游更新。
+
 ## 本机（已配置好）
 
 - ✅ 每小时自动推送技能更新到 GitHub
