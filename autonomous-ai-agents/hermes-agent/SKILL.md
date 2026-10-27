@@ -129,7 +129,7 @@ hermes skills tap add REPO  Add a GitHub repo as skill source
 
 ### MCP Servers
 
-For a worked example installing **CodeGraph** (pre-built code knowledge graph for AI agents, 57K+ ⭐) as an MCP server for Hermes in a Docker environment, see `references/codegraph-integration.md`.
+**CodeGraph**（pre-built code knowledge graph for AI agents, MIT）now has its own skill: load `codegraph` for install, Hermes wiring, `projectPath` / env-string pitfalls, CLI usage and limits. (The former `references/codegraph-integration.md` was merged into it.)
 
 ```bash
 hermes mcp serve            Run Hermes as an MCP server

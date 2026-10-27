@@ -173,27 +173,9 @@ Run in parallel with Batch 1 and 2.
 npm install -g --silent typescript ts-node
 ```
 
-**CodeGraph (colbymchenry/codegraph) — 代码知识图谱 MCP 工具**
-
-CodeGraph 是 Hermes Agent 原生支持的 MCP 代码智能工具，安装后会在当前 Hermes 会话中直接提供 `codegraph_explore` 工具。它能减少 AI 助手搜索文件的工具调用次数 40-81%。
-
-```bash
-# 安装（GFW环境：取消代理后直连）
-unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
-npm i -g @colbymchenry/codegraph --noproxy '*'
-
-# 配置 Hermes（自动改 config.yaml，添加 codegraph MCP 服务）
-codegraph install --target=hermes --yes
-
-# 在每个项目目录初始化索引（一次，索引后自动文件监听同步）
-cd your-project
-codegraph init
-
-# 验证状态
-codegraph status
-```
-
-参考：`references/codegraph-setup.md`
+**CodeGraph（代码知识图谱 MCP 工具）** → 完整安装 / 接线 / 坑位见 `codegraph` 技能。
+一行速记：`npm i -g @colbymchenry/codegraph` → `codegraph init`（每个仓库一次）→ 验证 `codegraph status`。
+（原先这里的整段安装说明与 `references/codegraph-setup.md` 已合并进 `codegraph` 技能，避免同一套步骤存在两份。）
 
 **npm在代理环境下载失败：** 容器可能有全局 `http_proxy` / `https_proxy` 环境变量指向不可达代理。npm 会走代理连 registry.npmjs.org，连接失败则超时卡住（60s 无响应）。修复：
 
@@ -359,7 +341,6 @@ bash install.sh --update
 | Office (powerpoint) | python-pptx, openpyxl, python-docx | pip |
 | Visual (pixel-art, ascii-video) | pillow, ffmpeg | pip + apt |
 | Development | ripgrep, node, typescript | apt + npm |
-| Code Intelligence (CodeGraph MCP) | codegraph (npm) | npm |
 
 ## Hermes Multi-Device Skills Sync
 

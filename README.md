@@ -6,6 +6,18 @@
 > `product-management/` 目录是第三方作品，来自 [deanpeters/Product-Manager-Skills](https://github.com/deanpeters/Product-Manager-Skills)（v0.84，作者 Dean Peters），采用 **CC BY-NC-SA 4.0**：署名、**禁止商业使用**、改编需同方式共享。详见该目录下的 `ATTRIBUTION.md` 与 `LICENSE-CC-BY-NC-SA-4.0.txt`。
 > 该目录是**独立聚合**，不改编、不影响仓库内其他自制技能的授权；但**不要把本目录内容用于任何商业产品或付费交付**。
 
+## 新增技能（2026-10-27）
+
+| 技能 | 来源 | 许可 | 依赖 |
+|---|---|---|---|
+| `software-development/codegraph` | 自建（上游工具 [colbymchenry/codegraph](https://github.com/colbymchenry/codegraph)，MIT） | MIT | `npm i -g @colbymchenry/codegraph`（自带运行时，无 Node 版本要求） |
+
+**同一主题的重复内容已合并**（此前散落三处、都不叫 codegraph）：
+
+- `.archive/environment-enhancement/` 里的 CodeGraph 安装段 + `references/codegraph-setup.md` → 并入本技能
+- `autonomous-ai-agents/hermes-agent/references/codegraph-integration.md` → 并入本技能，原文删除，SKILL.md 改为一句指向
+- 顺带清掉旧文件里泄露的内网代理 IP
+
 ## 新增技能（2026-10-26）
 
 | 技能 | 来源 | 许可 | 依赖 |
