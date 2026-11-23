@@ -260,8 +260,22 @@ new close as above rather than reporting the stale row.
 - **大盘形状：指数弱、芯片尾盘翻红**。道指 -1.64%（-848 点，盘中一度 -2%/千点）、标普 -1.03% 四连跌（9 月以来最长）、纳指 -0.74%，但费半 **+0.34% 结束三连跌**（ARM +4.76%、博通 +2.46%、台积电 -3.68%）。⇒ 写法「指数杀的是权重与叙事，芯片是超跌反抽」。美银 11 月调查：科技股净超配 37%→**12%**，2006/6 以来最大单月降幅，比任何个股数据都更能解释资金行为。
 - **生成器无需改动**：把 `close`/`day_change`/`day_change_pct` 写进 raw JSON 后，状态卡自动显示「当日 📉 -0.68 (-0.44%)」「当日 📈 +0.37 (+0.10%)」，新卡片方向标签 📉 与简报表一致（152 份、📉20/📈10）。NVDA/TSLA 成交量用「成交额÷收盘价」核定（3.87 亿 / 2,199 万），再除 20 日均量得 1.76 倍放量 / 0.56 倍缩量。
 
+## 2026-11-23 跑（周一 07:3x = 美股周日 19:3x，无新 session；采集脚本两票全挂，已修脚本）
+
+- **形状**：`nvda`/`tsla` 两个 dict 只有 `{"symbol","error":"'NoneType' object has no attribute 'get'"}`。这是 **Nasdaq info API 返回 `{"data": null}`** 时 `data.get("data", {}).get("primaryData", {})` 崩溃（`.get` 默认值只在缺键时生效，键存在且为 None 照样返回 None）。**已修 `daily_briefing.py`：`raw = data.get("data") or {}`、`primary = raw.get("primaryData") or {}`，并在 `lastSalePrice` 为空时退回新写的 `yahoo_quote()`（query1 chart range=1mo，取最后两根收盘算涨跌 + volume）。实测 `yahoo_quote('NVDA')` → 125.53/-20.45/-14.0088，与官方收盘逐位一致。**
+- **同一脚本 07:32 挂、07:39 通** ⇒ 这类报错多为瞬时（代理 192.168.1.88:7890 拒绝连接 + Nasdaq 空响应），**先手工核价写简报，再顺手修脚本，不要等下一轮**。修完后 `nasdaq_quote('NVDA')` 返回 **128.3744 / -12.06%**（周末盘后延时价），**与官方收盘 125.53 差 2.8 美元** —— 采集值必须按「盘后」处理，表内用 125.53。
+- **周末行情**：11/20（周五）收盘 NVDA **125.53（-14.01%，量 6.33 亿股＝20 日均量 2.87 亿的 2.2 倍）**、TSLA **345.82（-7.64%，4,599 万股＝1.25 倍）**；纳指 22,617.73（-5.28%，年内转负 -2.69%）、标普 6,910.39（-3.70%，7 连跌）、道指 48,147.33（-1.93%）、费半 -10.73%、VIX 35.89（+26.2%）、10Y 4.912%、DXY 103.808。NVDA 七周连跌（2008/10 以来最长）、本周 -22.9%、距 10/6 纪录 239.24 **-47.5%**，周五收盘即 52 周新低；单日市值蒸发约 4,910 亿至 3.03 万亿。
+- **周日黄金是真新报价且逐分钟走高**：gold-api 3,570.30 @23:30 UTC → 3,578.10 @23:39 UTC；中文快讯同段「日内涨 1%，报 3,573」「突破 3,580，涨 1.32%」。**周五现货收 3,537.87、COMEX 主力结算 3,515.40（-4.62%，周 -9.5%）** ⇒ 表内写「+0.92% vs 周五现货收盘」，并在正文说明是超跌反弹而非转向（RSI 21.6 为两年最低、价格低于 MA200 约 21%、50/200 日死叉自 7/1）。
+- **周一前瞻的最佳两篇（`web_extract` 直取）**：① 券商中国《美股三大股指期货全线拉升！特朗普最新发声！》——盘前纳指期货 +2.0%/标普 +1.21%/道指 +0.76%、现货金 3,573、白银破 42（+2%）、特朗普「民主党胜选后市场跌超 6 万亿、纳指跌 20%」原话，外加**六家机构对「是否见底」的分歧报价**（爱德华琼斯/全国保险/道富/高盛交易台「买入机会但仓位仍偏高」）；② 哈富《一周前瞻》——**11/25 21:30 核心 PCE（预期 3.2%，RBC 3.3%）+ Q3 GDP 修正 3.5% + 个人支出 + 初请 19.7 万**、11/24 05:00 威廉姆斯、11/26 03:00 褐皮书、11/26 感恩节休市、11/27 13:00 ET 半日市（北京 11/28 02:00）、戴尔 11/24 盘后、HPE 11/23 盘后。
+- **A 类催化第 8 型：「会计口径/收入确认」**（前七型：OpenAI 营收预期差 / 融资端 / 现金流端 / 信用端 / 政策审批端 / 公司治理 / 卖方下修份额）。路透 11/20 独家：SEC 执法部门审查 NVDA 会计，焦点是去年把地区收入改按「客户总部」而非「账单地址」列报，新加坡（当时近全球一半销售）从拆分中消失；FT 早前已报该改动与新加坡销售暴涨同期。同日 DOJ 在审 129 亿美元收购 Hugging Face。**这一型与治理风险叠加时最致命：股价跌的是「收入可信度」，任何订单/毛利率数据都无法反驳；检索词 `SEC Nvidia accounting Singapore`（Reuters/NYT/Forbes 三源直取）。**
+- **贝森特口风反转要写清「谁在说话」**：FT 11/23 报道财长不再坚持「从外部找 CEO」，理由是「黄仁勋已辞职、现在就是外部人士」，同时拒绝表态是否应让其回归、强调要「看最终谁担责」；董事会仍称不打算复职。**总统/财长的个人立场不改变董事会程序，别写成利好催化剂。**
+- **TSLA 的三条实体线索**：FSD v15 于 11/21 起向北美 EAP 推送、12 月随假日更新大范围放开（官方称安全关键场景能力 ×25）；HSBC 上调至 Hold、目标价 359（原 Reduce）；Cybercab 扩至达拉斯 + 下一代 Model Y 或取消方向盘 + 上海工厂逆势提产（10 月中国本土交付 -66.1%）。**马斯克自己警告「AI 行业明年或面临严重资金短缺、营运资金缺口数千亿」——对自家 AI 叙事是双刃。**
+- **均线仍走 Yahoo chart（`range=2y` 对 NVDA 一次成功、TSLA 超时）**：一年窗口足够算 MA200，且更少超时；本轮 NVDA MA5 146.81/MA20 181.46/MA50 207.00/MA200 203.35，TSLA MA5 372.76/MA20 384.80/MA50 375.64/MA200 381.66（1y 高 489.88、低 298.32、20 日均量 3,672 万）。**单次只查一个 ticker + `timeout 60`，超时就换窗口重试，不要一次拉两只。**
+- **看板**：把核定收盘写进 raw JSON 的 `close/day_change/day_change_pct/close_source` 后，状态卡自动显示「收盘 $125.53 当日 📉 -20.45 (-14.01%)」「$345.82 📉 -28.59 (-7.64%)」，方向标签 📉 与表一致（157 份、📉22/📈8、日期命中 4 处）。**黄金卡片显示 gold-api 采集快照（3,570.30），与表内一致属正常。**
+
 ## Pitfalls
 
+- **`data.get("data", {})` 在 API 返回 `{"data": null}` 时必崩**（2026-11-23）：`.get(k, default)` 只在**缺键**时给默认值，键存在但值为 None 时返回 None，后续 `.get` 就抛 `'NoneType' object has no attribute 'get'`。所有嵌套 JSON 取值统一写 `(obj.get(k) or {})`；`daily_briefing.py` 已加 `yahoo_quote()` 兜底（chart API 最后两根收盘），**脚本报错时先核价出简报、再修脚本，两件事都别等**。
 - **快照 `change` 可能为 null 或与官方收盘矛盾**（2026-11-06）：TSLA 的 `change`/`change_pct` 直接是 null，NVDA 是 +0.01 而实际 −9.26%。生成器原写法 `{d.get('change',0):+.2f}` 对 null 会崩（`dict.get(k,0)` 只在缺键时给默认值）。**处理：先 `_num()` 归零防崩，再用 raw JSON 的 `close`/`day_change`/`day_change_pct` 覆盖为人工核定值。**
 - **哥伦布日（10 月第二个周一）美股开市、美债休市** —— 北京周二 07:3x 的 run 因此是**完整新 session**（不是周末形状），但 `国际金融要情` 的美债收益率是上一交易日的陈旧值，该页自己会标「休市」；把它当新数据就错了。
 - **Identify the snapshot SHAPE before computing anything** (2026-09-27 run): the pre-run JSON can flip
@@ -428,8 +442,7 @@ new close as above rather than reporting the stale row.
   with a time → headline `price - change`, sub-line labelled 盘后; without → headline `price`, sub-line
   labelled 当日. Keep both branches whenever you touch the cards, and diff the rendered card against the
   briefing's table before finishing.
-- `references/eastmoney-news-api.md` — Eastmoney search API mechanics + usage.
-- `templates/briefing_template.md` — the markdown briefing template (copy + fill).
+- `references/eastmoney-news-api.md` — Eastmoney search API mechanics + usage.- `templates/briefing_template.md` — the markdown briefing template (copy + fill).
 
 ## Pitfall: the historical API can lag a full session
 
