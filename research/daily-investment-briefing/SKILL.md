@@ -273,6 +273,16 @@ new close as above rather than reporting the stale row.
 - **均线仍走 Yahoo chart（`range=2y` 对 NVDA 一次成功、TSLA 超时）**：一年窗口足够算 MA200，且更少超时；本轮 NVDA MA5 146.81/MA20 181.46/MA50 207.00/MA200 203.35，TSLA MA5 372.76/MA20 384.80/MA50 375.64/MA200 381.66（1y 高 489.88、低 298.32、20 日均量 3,672 万）。**单次只查一个 ticker + `timeout 60`，超时就换窗口重试，不要一次拉两只。**
 - **看板**：把核定收盘写进 raw JSON 的 `close/day_change/day_change_pct/close_source` 后，状态卡自动显示「收盘 $125.53 当日 📉 -20.45 (-14.01%)」「$345.82 📉 -28.59 (-7.64%)」，方向标签 📉 与表一致（157 份、📉22/📈8、日期命中 4 处）。**黄金卡片显示 gold-api 采集快照（3,570.30），与表内一致属正常。**
 
+## 2026-11-26 跑（周四 07:3x = 美股周三 18:3x，完整新 session：感恩节前「深V」日）
+
+- 常规时区形态：`timestamp = "Nov 25, 2026 6:30 PM ET"` ⇒ `price − change`。NVDA 149.7298−0.4298=**149.30**、TSLA 380.19−0.05=**380.14**，与 Yahoo chart API 日线收盘逐位一致（Reuters「英伟达跌 3.9%」）。**Yahoo chart（range=1mo/1y）本期对 NVDA、TSLA 均一次成功，是当下最可靠的收盘 + 均线来源**（历史 API 未测，不必再依赖）。
+- **⚠️ 本期最大陷阱：盘中稿的整数点位不能当收盘，也不能当「已发生的事实」**。TipRanks《Why Is Tesla Falling Today, November 25》写「fell more than 5% to about $364」，而当日实际收 380.14（-1.18%）、日内低点仅 375.41 —— 该文数字与行情完全不符。**判据：任何「某票跌 X% 至 NN 美元」的英文稿，必须用 Yahoo 日线收盘 / stockanalysis 的 day's range 反查；若该价位不在当日区间内，直接弃用该稿的价格，只保留其中的事件信息（本例只有「欧盟 FSD 表决推迟至 12/15」可用）。**
+- **新形态：「指数盘中崩、尾盘全收回」的深 V 日**。纳指盘中 -4.7%（最低 22,7xx）、道指盘中 -1,100 点，收盘却是 道指 **+0.33%** / 标普 **-0.25%** / 纳指 **-0.62%**。⇒ 写简报必须以**收盘**定调、把盘中跌幅作为「情绪极值」单列，否则会把「尾盘抢筹」写成「股灾」。同理 VIX 盘中 35、收 28。
+- **黄金同日也是深 V，且必须做成两条口径**：盘中最低 **3,455**（2025/9 以来最低、破 3,500；来源 BullionVault + Fool 11:31 ET「-3.01% 至 3,454.60」），收盘 **+0.6% 至 3,576.89**（Investing.com 16:35 ET）/ gold-api 18:30 ET 3,577.10。**日内振幅约 3.5%，反转驱动是美元转跌（DXY 103.71）+ 10Y 回落至 4.84% + 空头回补，不是避险。** 若只读盘中稿（CNBC 13:24 ET「-0.6% 至 3,534」）会把收涨写成收跌。
+- **本期最省调用的一组来源（全 `web_search` 直出，无需 `web_extract`）**：CNN《Tech stock sell-off deepens as AI fears outweigh Huang's Nvidia return》给情绪与个股跌幅（NVDA -7% 盘中、CoreWeave -8%、美光/闪迪 -10%、Kospi -6.2%）；Reuters《Nasdaq, S&P 500 end down, but well off lows》给三大指数收盘点位 + 费半 -0.7% + 成交 220 亿股 + 涨跌家数；Investopedia/Yahoo 直播稿给 VIX 35→28、比特币 60,300、盘后与假日安排；Investing.com 给 PCE/GDP/CME 98% + 黄金收盘。**四篇覆盖一份完整简报。**
+- **宏观主对子本期换成「通胀+关税+加息 98%」三件套**：10 月 PCE 环比 +0.3%/同比 3.8%、核心同比 3.3%（预期 3.2%）、Q3 GDP 上修 4.3% ⇒ CME 12 月加息 25bp **98%**；特朗普对 14 个贸易伙伴提「产能过剩」关税（中国额外 20%）。**新判据：股灾日 10Y 反而跌到 4.84%（买债不买金）⇒ 黄金的「避险」属性本轮连续失效，写法要落到「实际利率 + 强制平仓」，别写避险买盘。**
+- 看板：raw JSON 写 `close/day_change/day_change_pct/close_source` 后状态卡自动显示「当日 📉 -6.08 (-3.91%)」「-4.54 (-1.18%)」，与新卡片 📉 一致（160 份、📉22/📈8、日期命中 4 处）。
+
 ## Pitfalls
 
 - **`data.get("data", {})` 在 API 返回 `{"data": null}` 时必崩**（2026-11-23）：`.get(k, default)` 只在**缺键**时给默认值，键存在但值为 None 时返回 None，后续 `.get` 就抛 `'NoneType' object has no attribute 'get'`。所有嵌套 JSON 取值统一写 `(obj.get(k) or {})`；`daily_briefing.py` 已加 `yahoo_quote()` 兜底（chart API 最后两根收盘），**脚本报错时先核价出简报、再修脚本，两件事都别等**。
